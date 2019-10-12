@@ -1289,11 +1289,17 @@ namespace Sres.Net.EEIP
             //----------------Request service
             commonPacketFormat.Data.Add((byte)Logix5000Services.Read_Tag_Service);
             //----------------Requested Path size (number of 16 bit words)
-            commonPacketFormat.Data.Add((byte)((tagPath.Length+2)/2));
+            var padTagPath = (tagPath.Length % 2 == 1);
+            var requestPathSize = (tagPath.Length+2+(padTagPath ? 1 : 0))/2;
+            commonPacketFormat.Data.Add((byte)(requestPathSize));
             //----------------Request Path
             commonPacketFormat.Data.Add(0x91); //Logical segment
             commonPacketFormat.Data.Add((byte)(tagPath.Length)); //number of chars in tag path
             commonPacketFormat.Data.AddRange(Encoding.ASCII.GetBytes(tagPath));
+            if (padTagPath) //add pad byte if odd number of bytes
+            {
+                commonPacketFormat.Data.Add(0x00);
+            }
             //----------------Number of elements to read
             commonPacketFormat.Data.Add(0x01);
             commonPacketFormat.Data.Add(0x00);
@@ -1301,7 +1307,7 @@ namespace Sres.Net.EEIP
             //Get common packet format data length
             commonPacketFormat.DataLength = (UInt16)commonPacketFormat.Data.Count;
             //Get encapsulated packet length
-            encapsulation.Length = (UInt16) (16+ commonPacketFormat.DataLength);
+            encapsulation.Length = (UInt16) (16+commonPacketFormat.DataLength);
             
 
             byte[] dataToWrite = new byte[encapsulation.toBytes().Length + commonPacketFormat.toBytes().Length];

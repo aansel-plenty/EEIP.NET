@@ -19,12 +19,11 @@ namespace ConsoleApplication1
             var resp_indentity = (response[1] * 255 + response[0]).ToString();
             Console.WriteLine("Revision of indentity object is " + resp_indentity);
 
-            response = eeipClient.readTag("TotalCount");
+            response = eeipClient.readTag("testEIPRead");
             Console.WriteLine(BitConverter.ToInt32(response,0).ToString());
             
             eeipClient.UnRegisterSession();
             Console.ReadKey();
-     
        
         }
     }
