@@ -1324,7 +1324,7 @@ namespace Sres.Net.EEIP
             return returnData;
         }
 
-        public byte[] WriteTagSingle(string tagPath)
+        public bool WriteTagSingle(string tagPath, UInt16 tagType, byte[] tagData)
         {
             if (sessionHandle == 0) //If a Session is not registered, Try to Register a Session with the predefined IP-Address and Port
                 this.RegisterSession();
@@ -1351,29 +1351,24 @@ namespace Sres.Net.EEIP
             var requestPathSize = (tagPath.Length + 2 + (padTagPath ? 1 : 0)) / 2;
 
             //Common Packet Format Data
-            commonPacketFormat.Data.Add((byte)Logix5000Services.Read_Tag_Service); //requested service
+            commonPacketFormat.Data.Add((byte)Logix5000Services.Write_Tag_Service); //requested service
             commonPacketFormat.Data.Add((byte)(requestPathSize)); //Requested Path size (number of 16 bit words)
             //Request Path
             commonPacketFormat.Data.Add(0x91); //Logical segment
             commonPacketFormat.Data.Add((byte)(tagPath.Length)); //number of chars in tag path
             commonPacketFormat.Data.AddRange(Encoding.ASCII.GetBytes(tagPath)); //tag path string
             if (padTagPath) commonPacketFormat.Data.Add(0x00); //add pad byte if odd number of bytes
-            commonPacketFormat.Data.AddRange(BitConverter.GetBytes((Int16)0x0001)); //Number of elements to read
+            commonPacketFormat.Data.AddRange(BitConverter.GetBytes(tagType)); //get the type of the tag
+            commonPacketFormat.Data.AddRange(BitConverter.GetBytes((Int16)0x0001)); //Number of elements to write
+            commonPacketFormat.Data.AddRange(tagData);
 
             //Get lengths now that packet is built
             commonPacketFormat.DataLength = (UInt16)commonPacketFormat.Data.Count;  //Get common packet format data length
             encapsulation.Length = (UInt16)(16 + commonPacketFormat.DataLength); //Get encapsulated packet length
 
-            var recvData = getUCMMreply(encapsulation, commonPacketFormat);
-
-            var tagTypeServiceParam = (UInt16)(recvData[45] << 8 | recvData[44]);
-            var isUDT = (tagTypeServiceParam == 0x02A0);
-            var replyDataOffset = isUDT ? 48 : 46;
-
-            byte[] returnData = new byte[recvData.Length - replyDataOffset];
-            System.Buffer.BlockCopy(recvData, replyDataOffset, returnData, 0, recvData.Length - replyDataOffset);
-
-            return returnData;
+            var recvData = getUCMMreply(encapsulation,commonPacketFormat);
+            
+            return true;
         }
 
         ObjectLibrary.IdentityObject identityObject;

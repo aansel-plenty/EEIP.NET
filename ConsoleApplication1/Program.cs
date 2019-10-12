@@ -40,17 +40,31 @@ namespace ConsoleApplication1
 
             //read simple tag
             response = eeipClient.ReadTagSingle("testEIPRead");
+            Console.WriteLine();
             Console.WriteLine(BitConverter.ToString(response));
             Console.WriteLine(String.Format("Read {0} bytes", response.Length));
             Console.WriteLine(BitConverter.ToInt32(response,0).ToString());
 
+            //read simple tag
+            response = eeipClient.ReadTagSingle("testEIPWrite");
+            Console.WriteLine();
+            Console.WriteLine(BitConverter.ToString(response));
+            Console.WriteLine(String.Format("Read {0} bytes", response.Length));
+            var testEIPwrite = BitConverter.ToInt32(response, 0);
+            Console.WriteLine(testEIPwrite);
+
+            //now write to the tag
+            var success = eeipClient.WriteTagSingle("testEIPWrite", 0x00C4, BitConverter.GetBytes(testEIPwrite + 1));
+
             //read simple udt
             response = eeipClient.ReadTagSingle("toVision");
+            Console.WriteLine();
             Console.WriteLine(BitConverter.ToString(response));
             Console.WriteLine(String.Format("Read {0} bytes",response.Length));
 
             //read simple udt to be able to write to it
             response = eeipClient.ReadTagSingle("fromVision");
+            Console.WriteLine();
             Console.WriteLine(BitConverter.ToString(response));
             Console.WriteLine(String.Format("Read {0} bytes", response.Length));
 
@@ -75,19 +89,20 @@ namespace ConsoleApplication1
 
             Stopwatch stopWatch = new Stopwatch();
             stopWatch.Start();
-
+            
             //Test read and write latency
             for (int i = 0; i < 100; i++)
             {
-                //read simple tag
-                response = eeipClient.ReadTagSingle("fromVision");
-                visionData.heartbeat = BitConverter.ToInt32(response, 0);
-                //Console.WriteLine("Heartbeat is {0}", visionData.heartbeat);
-                Console.WriteLine("Elapsed time {0} ms", stopWatch.ElapsedMilliseconds);
+                response = eeipClient.ReadTagSingle("testEIPWrite");
+                var readVal = BitConverter.ToInt32(response, 0);
+                var writeVal = readVal + 1;
+                eeipClient.WriteTagSingle("testEIPWrite", 0x00C4, BitConverter.GetBytes(writeVal));
+                Console.WriteLine("Read {0}, Wrote {1}",readVal,writeVal);
+                //Console.WriteLine("Elapsed time {0} ms", stopWatch.ElapsedMilliseconds);
             }
-
-            //Console.WriteLine("Elapsed time {0} ms",stopWatch.ElapsedMilliseconds);
-
+            
+            Console.WriteLine("Elapsed time {0} ms",stopWatch.ElapsedMilliseconds);
+            
             eeipClient.UnRegisterSession();
             Console.ReadKey();
        

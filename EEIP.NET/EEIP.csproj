@@ -49,6 +49,7 @@
     <Compile Include="CIP.cs" />
     <Compile Include="EIPClient.cs" />
     <Compile Include="Encapsulation.cs" />
+    <Compile Include="Logix.cs" />
     <Compile Include="ObjectLibrary\TcpIpInterfaceObject.cs" />
     <Compile Include="ObjectLibrary\AssemblyObject.cs" />
     <Compile Include="ObjectLibrary\ConnectionManagerObject.cs" />
