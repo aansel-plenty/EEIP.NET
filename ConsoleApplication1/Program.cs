@@ -33,8 +33,8 @@ namespace ConsoleApplication1
             eeipClient.RegisterSession();
 
             byte[] response = eeipClient.GetAttributeSingle(0x01, 1, 1);
-            var resp_indentity = (response[1] * 255 + response[0]).ToString();
-            Console.WriteLine("Revision of indentity object is " + resp_indentity);
+            var resp_identity = (response[1] << 8 | response[0]).ToString();
+            Console.WriteLine("Revision of identity object is " + resp_identity);
 
             //read simple tag
             response = eeipClient.readTag("testEIPRead");
@@ -66,10 +66,12 @@ namespace ConsoleApplication1
             //Just output for debug
             Console.WriteLine();
             Console.WriteLine("Hearbeat is {0}", visionData.heartbeat);
-            foreach (var item in visionData.cameraData)
+            foreach (CameraData item in visionData.cameraData)
             {
                 Console.WriteLine("Status is {0}, offset is {1}",item.status,item.offset);
             }
+
+            //Test read and write latency
 
             eeipClient.UnRegisterSession();
             Console.ReadKey();

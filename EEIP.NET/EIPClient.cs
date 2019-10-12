@@ -253,7 +253,7 @@ namespace Sres.Net.EEIP
             Encapsulation encapsulation = new Encapsulation();
             encapsulation.Command = Encapsulation.CommandsEnum.UnRegisterSession;
             encapsulation.Length = 0;
-            encapsulation.SessionHandle =  sessionHandle;
+            encapsulation.SessionHandle = sessionHandle;
  
             stream.Write(encapsulation.toBytes(), 0, encapsulation.toBytes().Length);
             byte[] data = new Byte[256];
