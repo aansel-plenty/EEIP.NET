@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Threading;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -37,18 +39,18 @@ namespace ConsoleApplication1
             Console.WriteLine("Revision of identity object is " + resp_identity);
 
             //read simple tag
-            response = eeipClient.readTag("testEIPRead");
+            response = eeipClient.ReadTagSingle("testEIPRead");
             Console.WriteLine(BitConverter.ToString(response));
             Console.WriteLine(String.Format("Read {0} bytes", response.Length));
             Console.WriteLine(BitConverter.ToInt32(response,0).ToString());
 
             //read simple udt
-            response = eeipClient.readTag("toVision");
+            response = eeipClient.ReadTagSingle("toVision");
             Console.WriteLine(BitConverter.ToString(response));
             Console.WriteLine(String.Format("Read {0} bytes",response.Length));
 
             //read simple udt to be able to write to it
-            response = eeipClient.readTag("fromVision");
+            response = eeipClient.ReadTagSingle("fromVision");
             Console.WriteLine(BitConverter.ToString(response));
             Console.WriteLine(String.Format("Read {0} bytes", response.Length));
 
@@ -65,13 +67,26 @@ namespace ConsoleApplication1
 
             //Just output for debug
             Console.WriteLine();
-            Console.WriteLine("Hearbeat is {0}", visionData.heartbeat);
+            Console.WriteLine("Heartbeat is {0}", visionData.heartbeat);
             foreach (CameraData item in visionData.cameraData)
             {
                 Console.WriteLine("Status is {0}, offset is {1}",item.status,item.offset);
             }
 
+            Stopwatch stopWatch = new Stopwatch();
+            stopWatch.Start();
+
             //Test read and write latency
+            for (int i = 0; i < 100; i++)
+            {
+                //read simple tag
+                response = eeipClient.ReadTagSingle("fromVision");
+                visionData.heartbeat = BitConverter.ToInt32(response, 0);
+                //Console.WriteLine("Heartbeat is {0}", visionData.heartbeat);
+                Console.WriteLine("Elapsed time {0} ms", stopWatch.ElapsedMilliseconds);
+            }
+
+            //Console.WriteLine("Elapsed time {0} ms",stopWatch.ElapsedMilliseconds);
 
             eeipClient.UnRegisterSession();
             Console.ReadKey();

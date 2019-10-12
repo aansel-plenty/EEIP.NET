@@ -66,6 +66,88 @@ namespace Sres.Net.EEIP
     /// <summary>
     /// Table B-1.1 CIP General Status Codes
     /// </summary>
+    internal static class CIPGeneralStatusCodes
+    {
+        internal static Dictionary<byte, string> GetStatus(byte code)
+        {
+            var statusName = GetStatusName(code);
+            return new Dictionary<byte, string>
+                {
+                    {code,statusName}
+                };
+        }
+        internal static string GetStatusName(byte code)
+        {
+            string statusName = "";
+            //check if code exists in standard table
+            if (!StatusCodes.TryGetValue(code, out statusName))
+            {
+                if (code >= 0x2B & code <= 0xCF)
+                {
+                    statusName = "Reserved by CIP for future extensions";
+                }
+                else  //between 0xD0 and 0xFF
+                {
+                    statusName = "Reserved for Object Class and service errors";
+                }
+            }
+            return statusName;
+        }
+
+        public const byte CIP_SERVICE_SUCCESS = 0x00;
+
+        internal static Dictionary<byte,string> StatusCodes = new Dictionary<byte,string>()
+        {
+            {0x00,"Success"},
+            {0x01,"Connection failure"},
+            {0x02,"Resource unavailable"},
+            {0x03,"Invalid Parameter value"},
+            {0x04,"Path segment error"},
+            {0x05,"Path destination unknown"},
+            {0x06,"Partial transfer"},
+            {0x07,"Connection lost"},
+            {0x08,"Service not supported"},
+            {0x09,"Invalid attribute value"},
+            {0x0A,"Attribute List error"},
+            {0x0B,"Already in requested mode/state"},
+            {0x0C,"Object state conflict"},
+            {0x0D,"Object already exists"},
+            {0x0E,"Attribute not settable"},
+            {0x0F,"Privilege violation"},
+            {0x10,"Device state conflict"},
+            {0x11,"Reply data too large"},
+            {0x12,"Fragmentation of a primitive value"},
+            {0x13,"Not enough data"},
+            {0x14,"Attribute not supported"},
+            {0x15,"Too much data"},
+            {0x16,"Object does not exist"},
+            {0x17,"Service fragmentation sequence not in progress"},
+            {0x18,"No stored attribute data"},
+            {0x19,"Store operation failure"},
+            {0x1A,"Routing failure, request packet too large"},
+            {0x1B,"Routing failure, response packet too large"},
+            {0x1C,"Missing attribute list entry data"},
+            {0x1D,"Invalid attribute value list"},
+            {0x1E,"Embedded service error"},
+            {0x1F,"Vendor specific error"},
+            {0x20,"Invalid parameter"},
+            {0x21,"Write-once value or medium atready written"},
+            {0x22,"Invalid Reply Received"},
+            {0x23,"Buffer overflow"},
+            {0x24,"Message format error"},
+            {0x25,"Key failure path"},
+            {0x26,"Path size invalid"},
+            {0x27,"Unecpected attribute list"},
+            {0x28,"Invalid Member ID"},
+            {0x29,"Member not settable"},
+            {0x2A,"Group 2 only Server failure"},
+            {0x2B,"Unknown Modbus Error"}
+        };
+    }
+
+    /// <summary>
+    /// Table B-1.1 CIP General Status Codes
+    /// </summary>
     internal static class GeneralStatusCodes
     {
         static internal string GetStatusCode(byte code)
