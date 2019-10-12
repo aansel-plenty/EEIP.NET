@@ -1296,10 +1296,8 @@ namespace Sres.Net.EEIP
             commonPacketFormat.Data.Add(0x91); //Logical segment
             commonPacketFormat.Data.Add((byte)(tagPath.Length)); //number of chars in tag path
             commonPacketFormat.Data.AddRange(Encoding.ASCII.GetBytes(tagPath));
-            if (padTagPath) //add pad byte if odd number of bytes
-            {
-                commonPacketFormat.Data.Add(0x00);
-            }
+            //add pad byte if odd number of bytes
+            if (padTagPath) commonPacketFormat.Data.Add(0x00);
             //----------------Number of elements to read
             commonPacketFormat.Data.Add(0x01);
             commonPacketFormat.Data.Add(0x00);
@@ -1327,7 +1325,13 @@ namespace Sres.Net.EEIP
             }
             //--------------------------END Error?
 
-            var replyDataOffset = 46;
+            var tagTypeServiceParam = (UInt16) (data[45] << 8 | data[44]);
+            var isUDT = (tagTypeServiceParam == 0x02A0);
+            var replyDataOffset = isUDT ? 48 : 46;
+            if (isUDT)
+            {
+                Console.WriteLine("I found a UDT!");
+            }
             byte[] returnData = new byte[bytes - replyDataOffset];
             System.Buffer.BlockCopy(data, replyDataOffset, returnData, 0, bytes - replyDataOffset);
 

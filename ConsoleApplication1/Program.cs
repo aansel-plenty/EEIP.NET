@@ -19,9 +19,22 @@ namespace ConsoleApplication1
             var resp_indentity = (response[1] * 255 + response[0]).ToString();
             Console.WriteLine("Revision of indentity object is " + resp_indentity);
 
+            //read simple tag
             response = eeipClient.readTag("testEIPRead");
+            Console.WriteLine(BitConverter.ToString(response));
+            Console.WriteLine(String.Format("Read {0} bytes", response.Length));
             Console.WriteLine(BitConverter.ToInt32(response,0).ToString());
-            
+
+            //read simple udt
+            response = eeipClient.readTag("toVision");
+            Console.WriteLine(BitConverter.ToString(response));
+            Console.WriteLine(String.Format("Read {0} bytes",response.Length));
+
+            //read simple udt to be able to write to it
+            response = eeipClient.readTag("fromVision");
+            Console.WriteLine(BitConverter.ToString(response));
+            Console.WriteLine(String.Format("Read {0} bytes", response.Length));
+
             eeipClient.UnRegisterSession();
             Console.ReadKey();
        
