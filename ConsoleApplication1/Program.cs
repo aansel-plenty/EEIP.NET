@@ -7,6 +7,23 @@ using Sres.Net.EEIP;
 
 namespace ConsoleApplication1
 {
+    public struct CameraData
+    {
+        public Int32 status;
+        public float offset;
+    }
+
+    public class VisionRecvData
+    {
+        public Int32 heartbeat;
+        public List<CameraData> cameraData;
+
+        public VisionRecvData()
+        {
+            heartbeat = 0;
+            cameraData = new List<CameraData>();
+        }
+    }
     class Program
     {
         static void Main(string[] args)
@@ -34,6 +51,25 @@ namespace ConsoleApplication1
             response = eeipClient.readTag("fromVision");
             Console.WriteLine(BitConverter.ToString(response));
             Console.WriteLine(String.Format("Read {0} bytes", response.Length));
+
+            VisionRecvData visionData = new VisionRecvData();
+            visionData.heartbeat = BitConverter.ToInt32(response,0);
+            
+            for (int i = 0; i < 8; i++)
+            {
+                CameraData c1 = new CameraData();
+                c1.status = BitConverter.ToInt32(response, 4 + 8 * i);
+                c1.offset = BitConverter.ToSingle(response, 8 + 8 * i);
+                visionData.cameraData.Add(c1);
+            }
+
+            //Just output for debug
+            Console.WriteLine();
+            Console.WriteLine("Hearbeat is {0}", visionData.heartbeat);
+            foreach (var item in visionData.cameraData)
+            {
+                Console.WriteLine("Status is {0}, offset is {1}",item.status,item.offset);
+            }
 
             eeipClient.UnRegisterSession();
             Console.ReadKey();
