@@ -37,6 +37,14 @@ namespace Sres.Net.EEIP
         GroupSync = 0x1C
     }
 
+    public enum Logix5000Services : byte
+    {
+        Read_Tag_Service = 0x4C,
+        Read_Tag_Fragmented_Service = 0x52,
+        Write_Tag_Service = 0x4D,
+        Write_Tag_Fragmented_Service = 0x53,
+        Read_Modify_Write_Tag_Service = 0x4E
+    }
 
     public class CIPException : Exception
     {

@@ -1255,6 +1255,79 @@ namespace Sres.Net.EEIP
             return this.GetAttributeAll(classID, 0);
         }
 
+        public byte[] readTag(string tagPath)
+        {
+            if (sessionHandle == 0) //If a Session is not registered, Try to Register a Session with the predefined IP-Address and Port
+                this.RegisterSession();
+
+            //Encapsulation header
+            Encapsulation encapsulation = new Encapsulation();
+            encapsulation.Command = Encapsulation.CommandsEnum.SendRRData;
+            //encapsulation.Length = (UInt16)(18 + requestedPath.Length);
+            encapsulation.SessionHandle = sessionHandle;
+
+            //Command specific data
+            //---------------Interface Handle CIP
+            encapsulation.CommandSpecificData.Add(0);
+            encapsulation.CommandSpecificData.Add(0);
+            encapsulation.CommandSpecificData.Add(0);
+            encapsulation.CommandSpecificData.Add(0);
+            //----------------Timeout
+            encapsulation.CommandSpecificData.Add(0);
+            encapsulation.CommandSpecificData.Add(0);
+
+            //Common Packet Format (Table 2-6.1)
+            Encapsulation.CommonPacketFormat commonPacketFormat = new Encapsulation.CommonPacketFormat();
+            commonPacketFormat.ItemCount = 0x02;
+            //Address item
+            commonPacketFormat.AddressItem = 0x0000;        //NULL (used for UCMM Messages)
+            commonPacketFormat.AddressLength = 0x0000;
+            //Data item
+            commonPacketFormat.DataItem = 0xB2;
+            //commonPacketFormat.DataLength = (UInt16)(2 + requestedPath.Length);
+
+            //----------------Request service
+            commonPacketFormat.Data.Add((byte)Logix5000Services.Read_Tag_Service);
+            //----------------Requested Path size (number of 16 bit words)
+            commonPacketFormat.Data.Add((byte)((tagPath.Length+2)/2));
+            //----------------Request Path
+            commonPacketFormat.Data.Add(0x91); //Logical segment
+            commonPacketFormat.Data.Add((byte)(tagPath.Length)); //number of chars in tag path
+            commonPacketFormat.Data.AddRange(Encoding.ASCII.GetBytes(tagPath));
+            //----------------Number of elements to read
+            commonPacketFormat.Data.Add(0x01);
+            commonPacketFormat.Data.Add(0x00);
+
+            //Get common packet format data length
+            commonPacketFormat.DataLength = (UInt16)commonPacketFormat.Data.Count;
+            //Get encapsulated packet length
+            encapsulation.Length = (UInt16) (16+ commonPacketFormat.DataLength);
+            
+
+            byte[] dataToWrite = new byte[encapsulation.toBytes().Length + commonPacketFormat.toBytes().Length];
+            System.Buffer.BlockCopy(encapsulation.toBytes(), 0, dataToWrite, 0, encapsulation.toBytes().Length);
+            System.Buffer.BlockCopy(commonPacketFormat.toBytes(), 0, dataToWrite, encapsulation.toBytes().Length, commonPacketFormat.toBytes().Length);
+            encapsulation.toBytes();
+
+            stream.Write(dataToWrite, 0, dataToWrite.Length);
+            byte[] data = new Byte[564];
+
+            Int32 bytes = stream.Read(data, 0, data.Length);
+
+            //--------------------------BEGIN Error?
+            if (data[42] != 0)      //Exception codes see "Table B-1.1 CIP General Status Codes"
+            {
+                throw new CIPException(GeneralStatusCodes.GetStatusCode(data[42]));
+            }
+            //--------------------------END Error?
+
+            var replyDataOffset = 46;
+            byte[] returnData = new byte[bytes - replyDataOffset];
+            System.Buffer.BlockCopy(data, replyDataOffset, returnData, 0, bytes - replyDataOffset);
+
+            return returnData;
+        }
+
         ObjectLibrary.IdentityObject identityObject;
         /// <summary>
         /// Implementation of the identity Object (Class Code: 0x01) - Required Object according to CIP-Specification
