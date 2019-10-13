@@ -15,7 +15,8 @@ namespace Explicit_Messaging_Example
 
             //Register Session (Wago-Device 750-352 IP-Address: 192.168.178.66) 
             //we use the Standard Port for Ethernet/IP TCP-connections 0xAF12
-            eeipClient.RegisterSession("192.168.1.3");
+            eeipClient.IPAddress = "192.168.1.3";
+            eeipClient.RegisterSession();
 
             //We write an Output to the Wago-Device; According to the Manual of the Device
             //Instance 0x66 of the Assembly Object contains the Digital Output data

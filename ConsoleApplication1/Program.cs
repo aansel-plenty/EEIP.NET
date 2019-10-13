@@ -28,6 +28,20 @@ namespace ConsoleApplication1
             Console.WriteLine("Read {0} bytes", response.Length);
             Console.WriteLine(BitConverter.ToInt32(response,0).ToString());
 
+            //read slightly more complicated tag (bit access)
+            //response = eeipClient.ReadTagSingle("testEIPRead.1");
+            //Console.WriteLine();
+            //Console.WriteLine(BitConverter.ToString(response));
+            //Console.WriteLine("Read {0} bytes", response.Length);
+            //Console.WriteLine(BitConverter.ToInt32(response, 0).ToString());
+
+            //read slightly more complicated tag (udt)
+            response = eeipClient.ReadTagSingle("fromVision.heartbeat");
+            Console.WriteLine();
+            Console.WriteLine(BitConverter.ToString(response));
+            Console.WriteLine("Read {0} bytes", response.Length);
+            Console.WriteLine(BitConverter.ToInt32(response, 0).ToString());
+
             //read simple tag
             response = eeipClient.ReadTagSingle("testEIPWrite");
             Console.WriteLine();

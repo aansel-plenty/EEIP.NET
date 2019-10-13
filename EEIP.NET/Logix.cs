@@ -8,13 +8,21 @@ namespace Sres.Net.EEIP
 {
     class Logix
     {
+        public enum Logix5000Services : byte
+        {
+            Read_Tag_Service = 0x4C,
+            Read_Tag_Fragmented_Service = 0x52,
+            Write_Tag_Service = 0x4D,
+            Write_Tag_Fragmented_Service = 0x53,
+            Read_Modify_Write_Tag_Service = 0x4E
+        }
     }
-
-    
 
     public class LogixTag
     {
-        //Volume 1 Appendix C-2.1.1 Elementary Data Types
+        /// <summary>
+        /// Volume 1 Appendix C-2.1.1 Elementary Data Types
+        /// </summary>
         internal static Dictionary<byte, Tuple<string, int>> TagTypes = new Dictionary<byte, Tuple<string, int>>()
         {
             {0xA0,Tuple.Create("STRUCT",0)},
@@ -22,7 +30,7 @@ namespace Sres.Net.EEIP
             {0xC2,Tuple.Create("SINT",1)},
             {0xC3,Tuple.Create("INT",2)},
             {0xC4,Tuple.Create("DINT",4)},
-            {0xC5,Tuple.Create("LINT",5)},
+            {0xC5,Tuple.Create("LINT",8)},
             {0xC6,Tuple.Create("USINT",1)},
             {0xC7,Tuple.Create("UINT",2)},
             {0xC8,Tuple.Create("UDINT",4)},
@@ -46,8 +54,46 @@ namespace Sres.Net.EEIP
             {0xDA,Tuple.Create("SHORT_STRING",0)},
             {0xDB,Tuple.Create("TIME",0)},
             {0xDC,Tuple.Create("EPATH",0)},
-            {0xDC,Tuple.Create("ENGUNIT",0)}
+            {0xDD,Tuple.Create("ENGUNIT",0)}
         };
+
+        /// <summary>
+        /// Builds request path for tag access (r/w)
+        /// Logix 5000 Controllers Data Access 1756-PM020F-EN-P
+        /// </summary>
+        internal static byte[] GetRequestPath(string tagPath)
+        {
+            var requestPathData = new List<byte>();
+            var splitPath = tagPath.Split('.').ToList(); //remove udt and bit access junk
+
+            if (int.TryParse(splitPath.Last(), out var bit))  //check for bit level access
+            {
+                if (bit >= 0 & bit <= 31)
+                {
+                    throw new CIPException("Bit access not supported!");
+                }
+                else
+                {
+                    throw new CIPException(String.Format("Out of bounds bit access for bit @ {0}", bit));
+                }
+            }
+            else
+            {
+                foreach (var path in splitPath)
+                {
+                    var padTagPath = (path.Length % 2 == 1);
+                    var requestPathSize = (tagPath.Length + 2 + (padTagPath ? 1 : 0)) / 2;
+
+                    requestPathData.Add(0x91); //Logical segment
+                    requestPathData.Add((byte)path.Length); //number of chars in tag path
+                    requestPathData.AddRange(Encoding.ASCII.GetBytes(path)); //tag path string
+                    if (padTagPath) requestPathData.Add(0x00); //add pad byte if odd number of bytes
+                }
+            }
+
+            return requestPathData.ToArray();
+        }
+
         public string TagName = "";
 
     }

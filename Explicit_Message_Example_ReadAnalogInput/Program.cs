@@ -15,7 +15,8 @@ namespace Explicit_Message_Example_ReadAnalogInput
 
             //Register Session (Wago-Device 750-352 IP-Address: 192.168.178.66) 
             //we use the Standard Port for Ethernet/IP TCP-connections 0xAF12
-            eeipClient.RegisterSession("192.168.1.3");
+            eeipClient.IPAddress = "192.168.1.3";
+            eeipClient.RegisterSession();
 
             //Get the State of Analog Inputs According to the Manual
             //Instance 0x6D of the Assembly Object contains the Analog Input data
