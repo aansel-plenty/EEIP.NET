@@ -9,28 +9,11 @@ using Sres.Net.EEIP;
 
 namespace ConsoleApplication1
 {
-    public struct CameraData
-    {
-        public Int32 status;
-        public float offset;
-    }
-
-    public class VisionRecvData
-    {
-        public Int32 heartbeat;
-        public List<CameraData> cameraData;
-
-        public VisionRecvData()
-        {
-            heartbeat = 0;
-            cameraData = new List<CameraData>();
-        }
-    }
     class Program
     {
         static void Main(string[] args)
         {
-            EEIPClient eeipClient = new EEIPClient();
+            var eeipClient = new EEIPClient();
             eeipClient.IPAddress = "10.100.21.30";
             eeipClient.RegisterSession();
 
@@ -42,14 +25,14 @@ namespace ConsoleApplication1
             response = eeipClient.ReadTagSingle("testEIPRead");
             Console.WriteLine();
             Console.WriteLine(BitConverter.ToString(response));
-            Console.WriteLine(String.Format("Read {0} bytes", response.Length));
+            Console.WriteLine("Read {0} bytes", response.Length);
             Console.WriteLine(BitConverter.ToInt32(response,0).ToString());
 
             //read simple tag
             response = eeipClient.ReadTagSingle("testEIPWrite");
             Console.WriteLine();
             Console.WriteLine(BitConverter.ToString(response));
-            Console.WriteLine(String.Format("Read {0} bytes", response.Length));
+            Console.WriteLine("Read {0} bytes", response.Length);
             var testEIPwrite = BitConverter.ToInt32(response, 0);
             Console.WriteLine(testEIPwrite);
 
@@ -60,13 +43,13 @@ namespace ConsoleApplication1
             response = eeipClient.ReadTagSingle("toVision");
             Console.WriteLine();
             Console.WriteLine(BitConverter.ToString(response));
-            Console.WriteLine(String.Format("Read {0} bytes",response.Length));
+            Console.WriteLine("Read {0} bytes", response.Length);
 
             //read simple udt to be able to write to it
             response = eeipClient.ReadTagSingle("fromVision");
             Console.WriteLine();
             Console.WriteLine(BitConverter.ToString(response));
-            Console.WriteLine(String.Format("Read {0} bytes", response.Length));
+            Console.WriteLine("Read {0} bytes", response.Length);
 
             VisionRecvData visionData = new VisionRecvData();
             visionData.heartbeat = BitConverter.ToInt32(response,0);
@@ -97,7 +80,7 @@ namespace ConsoleApplication1
                 var readVal = BitConverter.ToInt32(response, 0);
                 var writeVal = readVal + 1;
                 eeipClient.WriteTagSingle("testEIPWrite", 0x00C4, BitConverter.GetBytes(writeVal));
-                Console.WriteLine("Read {0}, Wrote {1}",readVal,writeVal);
+                //Console.WriteLine("Read {0}, Wrote {1}",readVal,writeVal);
                 //Console.WriteLine("Elapsed time {0} ms", stopWatch.ElapsedMilliseconds);
             }
             
@@ -105,7 +88,6 @@ namespace ConsoleApplication1
             
             eeipClient.UnRegisterSession();
             Console.ReadKey();
-       
         }
     }
 }

@@ -19,21 +19,20 @@ namespace Sres.Net.EEIP
         UInt32 multicastAddress;
         UInt16 connectionSerialNumber;
         /// <summary>
-        /// TCP-Port of the Server
+        /// TCP-Port of the Server - Standard is 0xAF12 44818
         /// </summary>
         public ushort TCPPort { get; set; } = 0xAF12;
         /// <summary>
-        /// UDP-Port of the IO-Adapter - Standard is 0xAF12
+        /// UDP-Port of the IO-Adapter - Standard is 0x08AE 2222
         /// </summary>
         public ushort TargetUDPPort { get; set; } = 0x08AE;
         /// <summary>
-        /// UDP-Port of the Scanner - Standard is 0xAF12
+        /// UDP-Port of the Scanner - Standard is 0x08AE 2222
         /// </summary>
         public ushort OriginatorUDPPort { get; set; } = 0x08AE;
         /// <summary>
         /// IPAddress of the Ethernet/IP Device
         /// </summary>
-        /// 
         public string IPAddress { get; set; } = "172.0.0.1";
         /// <summary>
         /// Requested Packet Rate (RPI) in Microseconds Originator -> Target for Implicit-Messaging (Default 0x7A120 -> 500ms)
@@ -150,8 +149,7 @@ namespace Sres.Net.EEIP
                 // EndReceive worked and we have received data and remote endpoint
                 if (receiveBytes.Length > 0)
                 {
-                    UInt16 command = Convert.ToUInt16(receiveBytes[0]
-                                                | (receiveBytes[1] << 8));
+                    UInt16 command = Convert.ToUInt16((receiveBytes[1] << 8) | receiveBytes[0]);
                     if (command == 0x63)
                     {
                         returnList.Add(Encapsulation.CIPIdentityItem.getCIPIdentityItem(24, receiveBytes));
@@ -176,12 +174,10 @@ namespace Sres.Net.EEIP
         /// <returns>List<Encapsulation.CIPIdentityItem> contains the received informations from all devices </returns>	
         public List<Encapsulation.CIPIdentityItem> ListIdentity()
         {
-            
             foreach (NetworkInterface ni in NetworkInterface.GetAllNetworkInterfaces())
             {
                 if (ni.NetworkInterfaceType == NetworkInterfaceType.Wireless80211 || ni.NetworkInterfaceType == NetworkInterfaceType.Ethernet)
                 {
-
                     foreach (UnicastIPAddressInformation ip in ni.GetIPProperties().UnicastAddresses)
                     {
                         if (ip.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
@@ -192,7 +188,7 @@ namespace Sres.Net.EEIP
                             String multicastAddress = (address.GetAddressBytes()[0] | (~(mask.GetAddressBytes()[0])) & 0xFF).ToString() + "." + (address.GetAddressBytes()[1] | (~(mask.GetAddressBytes()[1])) & 0xFF).ToString() + "." + (address.GetAddressBytes()[2] | (~(mask.GetAddressBytes()[2])) & 0xFF).ToString() + "." + (address.GetAddressBytes()[3] | (~(mask.GetAddressBytes()[3])) & 0xFF).ToString();
 
                             byte[] sendData = new byte[24];
-                            sendData[0] = 0x63;               //Command for "ListIdentity"
+                            sendData[0] = 0x63; //Command for "ListIdentity"
                             System.Net.Sockets.UdpClient udpClient = new System.Net.Sockets.UdpClient();
                             System.Net.IPEndPoint endPoint = new System.Net.IPEndPoint(System.Net.IPAddress.Parse(multicastAddress), 44818);
                             udpClient.Send(sendData, sendData.Length, endPoint);
@@ -214,32 +210,29 @@ namespace Sres.Net.EEIP
         /// <summary>
         /// Sends a RegisterSession command to a target to initiate session
         /// </summary>
-        /// <param name="address">IP-Address of the target device</param> 
-        /// <param name="port">Port of the target device (default should be 0xAF12)</param> 
+        /// <param name="address">IP-Address of the target device</param>
         /// <returns>Session Handle</returns>	
-        public UInt32 RegisterSession(UInt32 address, UInt16 port)
+        public UInt32 RegisterSession()
         {
-            if (sessionHandle != 0)
-                return sessionHandle;
+            if (this.sessionHandle != 0)
+                return this.sessionHandle;
+
             Encapsulation encapsulation = new Encapsulation();
             encapsulation.Command = Encapsulation.CommandsEnum.RegisterSession;
             encapsulation.Length = 4;
             encapsulation.CommandSpecificData.AddRange(BitConverter.GetBytes((UInt16) 0x0001)); //Requested protocol version shall be set to 1.
             encapsulation.CommandSpecificData.AddRange(BitConverter.GetBytes((UInt16) 0x0000)); //Session options shall be set to "0"
 
-            string ipAddress = Encapsulation.CIPIdentityItem.getIPAddress(address);
-            this.IPAddress = ipAddress;
-            client = new TcpClient(ipAddress, port);
+            client = new TcpClient(this.IPAddress, this.TCPPort);
             stream = client.GetStream();
 
-            stream.Write(encapsulation.toBytes(), 0, encapsulation.toBytes().Length);
+            stream.Write(encapsulation.ToBytes(), 0, encapsulation.ToBytes().Length);
             byte[] data = new Byte[256];
 
             Int32 bytes = stream.Read(data, 0, data.Length);
 
-            UInt32 returnvalue = BitConverter.ToUInt32(data.Skip(4).Take(4).ToArray(),0); //get session handle. bytes 4,5,6,7
-            this.sessionHandle = returnvalue;
-            return returnvalue;
+            this.sessionHandle = BitConverter.ToUInt32(data.Skip(4).Take(4).ToArray(),0); //get session handle. bytes 4,5,6,7
+            return this.sessionHandle;
         }
 
         /// <summary>
@@ -250,9 +243,9 @@ namespace Sres.Net.EEIP
             Encapsulation encapsulation = new Encapsulation();
             encapsulation.Command = Encapsulation.CommandsEnum.UnRegisterSession;
             encapsulation.Length = 0;
-            encapsulation.SessionHandle = sessionHandle;
+            encapsulation.SessionHandle = this.sessionHandle;
  
-            stream.Write(encapsulation.toBytes(), 0, encapsulation.toBytes().Length);
+            stream.Write(encapsulation.ToBytes(), 0, encapsulation.ToBytes().Length);
             byte[] data = new Byte[256];
             client.Close();
             stream.Close();
@@ -481,9 +474,9 @@ namespace Sres.Net.EEIP
             encapsulation.Length = (ushort)(commonPacketFormat.toBytes().Length+6);//(ushort)(57 + (ushort)lengthOffset);
             //20 04 24 01 2C 65 2C 6B
 
-            byte[] dataToWrite = new byte[encapsulation.toBytes().Length + commonPacketFormat.toBytes().Length];
-            System.Buffer.BlockCopy(encapsulation.toBytes(), 0, dataToWrite, 0, encapsulation.toBytes().Length);
-            System.Buffer.BlockCopy(commonPacketFormat.toBytes(), 0, dataToWrite, encapsulation.toBytes().Length, commonPacketFormat.toBytes().Length);
+            byte[] dataToWrite = new byte[encapsulation.ToBytes().Length + commonPacketFormat.toBytes().Length];
+            System.Buffer.BlockCopy(encapsulation.ToBytes(), 0, dataToWrite, 0, encapsulation.ToBytes().Length);
+            System.Buffer.BlockCopy(commonPacketFormat.toBytes(), 0, dataToWrite, encapsulation.ToBytes().Length, commonPacketFormat.toBytes().Length);
             //encapsulation.toBytes();
             
             stream.Write(dataToWrite, 0, dataToWrite.Length);
@@ -500,7 +493,7 @@ namespace Sres.Net.EEIP
                     else
                         throw new CIPException("Connection failure, General Status Code: " + data[42] + " Additional Status Code: " + ((data[45] << 8) | data[44]) + " " + ObjectLibrary.ConnectionManagerObject.GetExtendedStatus((uint)((data[45] << 8) | data[44])));
                 else
-                    throw new CIPException(GeneralStatusCodes.GetStatusCode(data[42]));
+                    throw new CIPException(CIPGeneralStatusCodes.GetStatusName(data[42]));
             }
             //--------------------------END Error?
             //Read the Network ID from the Reply (see 3-3.7.1.1)
@@ -610,18 +603,15 @@ namespace Sres.Net.EEIP
 
             UInt32 hostID = deviceIPAddress & ~netmask;
             UInt32 mcastIndex = hostID - 1;
-            mcastIndex = mcastIndex & cip_Host_Mask;
+            mcastIndex &= cip_Host_Mask;
 
-            return (UInt32) (cip_Mcast_Base_Addr + mcastIndex * (UInt32)32);
+            return (UInt32) (mcastIndex << 5 | cip_Mcast_Base_Addr);
 
         }
 
         public void ForwardClose()
         {
-            //First stop the Thread which send data
-
-            stopUDP = true;
-
+            stopUDP = true; //First stop the Thread which send data
 
             int lengthOffset = (5 + (O_T_ConnectionType == ConnectionType.Null ? 0 : 2) + (T_O_ConnectionType == ConnectionType.Null ? 0 : 2));
 
@@ -720,10 +710,10 @@ namespace Sres.Net.EEIP
                 commonPacketFormat.Data.Add((byte)(T_O_InstanceID));
             }
 
-            byte[] dataToWrite = new byte[encapsulation.toBytes().Length + commonPacketFormat.toBytes().Length];
-            System.Buffer.BlockCopy(encapsulation.toBytes(), 0, dataToWrite, 0, encapsulation.toBytes().Length);
-            System.Buffer.BlockCopy(commonPacketFormat.toBytes(), 0, dataToWrite, encapsulation.toBytes().Length, commonPacketFormat.toBytes().Length);
-            encapsulation.toBytes();
+            byte[] dataToWrite = new byte[encapsulation.ToBytes().Length + commonPacketFormat.toBytes().Length];
+            System.Buffer.BlockCopy(encapsulation.ToBytes(), 0, dataToWrite, 0, encapsulation.ToBytes().Length);
+            System.Buffer.BlockCopy(commonPacketFormat.toBytes(), 0, dataToWrite, encapsulation.ToBytes().Length, commonPacketFormat.toBytes().Length);
+            encapsulation.ToBytes();
 
             stream.Write(dataToWrite, 0, dataToWrite.Length);
             byte[] data = new Byte[564];
@@ -733,17 +723,12 @@ namespace Sres.Net.EEIP
             //--------------------------BEGIN Error?
             if (data[42] != 0)      //Exception codes see "Table B-1.1 CIP General Status Codes"
             {
-                throw new CIPException(GeneralStatusCodes.GetStatusCode(data[42]));
+                throw new CIPException(CIPGeneralStatusCodes.GetStatusName(data[42]));
             }
-
 
             //Close the Socket for Receive
             udpClientReceiveClosed = true;
             udpClientReceive.Close();
-  
-           
-
-
         }
 
         private bool stopUDP;
@@ -827,13 +812,10 @@ namespace Sres.Net.EEIP
 
                 }
 
-                    //---------------Write data
-                    for ( int i = 0; i < O_T_Length; i++)
-                        o_t_IOData[20+headerOffset+i] = (byte)O_T_IOData[i];
                 //---------------Write data
-
-
-
+                for ( int i = 0; i < O_T_Length; i++)
+                    o_t_IOData[20+headerOffset+i] = (byte)O_T_IOData[i];
+                //---------------Write data
 
                 udpClientsend.Send(o_t_IOData, O_T_Length+20+headerOffset, endPointsend);
                 System.Threading.Thread.Sleep((int)RequestedPacketRate_O_T/1000);
@@ -883,42 +865,19 @@ namespace Sres.Net.EEIP
             LastReceivedImplicitMessage = DateTime.Now;
         }
 
-
-
         /// <summary>
         /// Sends a RegisterSession command to a target to initiate session
         /// </summary>
         /// <param name="address">IP-Address of the target device</param> 
         /// <param name="port">Port of the target device (default should be 0xAF12)</param> 
         /// <returns>Session Handle</returns>	
-        public UInt32 RegisterSession(string address, UInt16 port)
-        {
-            string[] addressSubstring = address.Split('.');
-            UInt32 ipAddress = UInt32.Parse(addressSubstring[3]) + (UInt32.Parse(addressSubstring[2]) << 8) + (UInt32.Parse(addressSubstring[1]) << 16) + (UInt32.Parse(addressSubstring[0]) << 24);
-            return RegisterSession(ipAddress, port);
-        }
-
-        /// <summary>
-        /// Sends a RegisterSession command to a target to initiate session with the Standard or predefined Port (Standard: 0xAF12)
-        /// </summary>
-        /// <param name="address">IP-Address of the target device</param> 
-        /// <returns>Session Handle</returns>	
-        public UInt32 RegisterSession(string address)
-        {
-            string[] addressSubstring = address.Split('.');
-            UInt32 ipAddress = UInt32.Parse(addressSubstring[3]) + (UInt32.Parse(addressSubstring[2]) << 8) + (UInt32.Parse(addressSubstring[1]) << 16) + (UInt32.Parse(addressSubstring[0]) << 24);
-            return RegisterSession(ipAddress, this.TCPPort);
-        }
-
-        /// <summary>
-        /// Sends a RegisterSession command to a target to initiate session with the Standard or predefined Port and Predefined IPAddress (Standard-Port: 0xAF12)
-        /// </summary>
-        /// <returns>Session Handle</returns>	
-        public UInt32 RegisterSession()
-        {
-            
-            return RegisterSession(this.IPAddress, this.TCPPort);
-        }
+        //public UInt32 RegisterSession(string address, UInt16 port)
+        //{
+        //    string[] addressSubstring = address.Split('.');
+        //    var address = IPAddress.
+        //    UInt32 ipAddress = (UInt32.Parse(addressSubstring[0]) << 24) | (UInt32.Parse(addressSubstring[1]) << 16) | (UInt32.Parse(addressSubstring[2]) << 8) | UInt32.Parse(addressSubstring[3]);
+        //    return RegisterSession(ipAddress);
+        //}
 
         public byte[] GetAttributeSingle(int classID, int instanceID, int attributeID)
         {
@@ -976,10 +935,10 @@ namespace Sres.Net.EEIP
                 commonPacketFormat.Data.Add(requestedPath[i]);
             }
 
-            byte[] dataToWrite = new byte[encapsulation.toBytes().Length + commonPacketFormat.toBytes().Length];
-            System.Buffer.BlockCopy(encapsulation.toBytes(), 0, dataToWrite, 0, encapsulation.toBytes().Length);
-            System.Buffer.BlockCopy(commonPacketFormat.toBytes(), 0, dataToWrite, encapsulation.toBytes().Length, commonPacketFormat.toBytes().Length);
-            encapsulation.toBytes();
+            byte[] dataToWrite = new byte[encapsulation.ToBytes().Length + commonPacketFormat.toBytes().Length];
+            System.Buffer.BlockCopy(encapsulation.ToBytes(), 0, dataToWrite, 0, encapsulation.ToBytes().Length);
+            System.Buffer.BlockCopy(commonPacketFormat.toBytes(), 0, dataToWrite, encapsulation.ToBytes().Length, commonPacketFormat.toBytes().Length);
+            encapsulation.ToBytes();
 
             stream.Write(dataToWrite, 0, dataToWrite.Length);
             byte[] data = new Byte[564];
@@ -989,7 +948,7 @@ namespace Sres.Net.EEIP
             //--------------------------BEGIN Error?
             if (data[42] != 0)      //Exception codes see "Table B-1.1 CIP General Status Codes"
             {
-                throw new CIPException(GeneralStatusCodes.GetStatusCode(data[42]));
+                throw new CIPException(CIPGeneralStatusCodes.GetStatusName(data[42]));
             }
             //--------------------------END Error?
 
@@ -1057,9 +1016,9 @@ namespace Sres.Net.EEIP
                 commonPacketFormat.Data.Add(requestedPath[i]);
             }
 
-            byte[] dataToWrite = new byte[encapsulation.toBytes().Length + commonPacketFormat.toBytes().Length];
-            System.Buffer.BlockCopy(encapsulation.toBytes(), 0, dataToWrite, 0, encapsulation.toBytes().Length);
-            System.Buffer.BlockCopy(commonPacketFormat.toBytes(), 0, dataToWrite, encapsulation.toBytes().Length, commonPacketFormat.toBytes().Length);
+            byte[] dataToWrite = new byte[encapsulation.ToBytes().Length + commonPacketFormat.toBytes().Length];
+            System.Buffer.BlockCopy(encapsulation.ToBytes(), 0, dataToWrite, 0, encapsulation.ToBytes().Length);
+            System.Buffer.BlockCopy(commonPacketFormat.toBytes(), 0, dataToWrite, encapsulation.ToBytes().Length, commonPacketFormat.toBytes().Length);
            
 
             stream.Write(dataToWrite, 0, dataToWrite.Length);
@@ -1069,7 +1028,7 @@ namespace Sres.Net.EEIP
             //--------------------------BEGIN Error?
             if (data[42] != 0)      //Exception codes see "Table B-1.1 CIP General Status Codes"
             {
-                throw new CIPException(GeneralStatusCodes.GetStatusCode(data[42]));
+                throw new CIPException(CIPGeneralStatusCodes.GetStatusName(data[42]));
             }
             //--------------------------END Error?
 
@@ -1141,10 +1100,10 @@ namespace Sres.Net.EEIP
             }
             //----------------Data
 
-            byte[] dataToWrite = new byte[encapsulation.toBytes().Length + commonPacketFormat.toBytes().Length];
-            System.Buffer.BlockCopy(encapsulation.toBytes(), 0, dataToWrite, 0, encapsulation.toBytes().Length);
-            System.Buffer.BlockCopy(commonPacketFormat.toBytes(), 0, dataToWrite, encapsulation.toBytes().Length, commonPacketFormat.toBytes().Length);
-            encapsulation.toBytes();
+            byte[] dataToWrite = new byte[encapsulation.ToBytes().Length + commonPacketFormat.toBytes().Length];
+            System.Buffer.BlockCopy(encapsulation.ToBytes(), 0, dataToWrite, 0, encapsulation.ToBytes().Length);
+            System.Buffer.BlockCopy(commonPacketFormat.toBytes(), 0, dataToWrite, encapsulation.ToBytes().Length, commonPacketFormat.toBytes().Length);
+            encapsulation.ToBytes();
 
             stream.Write(dataToWrite, 0, dataToWrite.Length);
             byte[] data = new Byte[564];
@@ -1154,7 +1113,7 @@ namespace Sres.Net.EEIP
             //--------------------------BEGIN Error?
             if (data[42] != 0)      //Exception codes see "Table B-1.1 CIP General Status Codes"
             {
-                throw new CIPException(GeneralStatusCodes.GetStatusCode(data[42]));
+                throw new CIPException(CIPGeneralStatusCodes.GetStatusName(data[42]));
             }
             //--------------------------END Error?
 
@@ -1173,23 +1132,23 @@ namespace Sres.Net.EEIP
         /// <param name="instanceID">Requested Instance ID</param>
         /// <param name="attributeID">Requested Attribute ID - if "0" the attribute will be ignored</param>
         /// <returns>Encrypted Request Path</returns>
-        private byte[] GetEPath(int classID, int instanceID, int attributeID)
+        private static byte[] GetEPath(int classID, int instanceID, int attributeID)
         {
             int byteCount = 0;
             if (classID < 0xff)
-                byteCount = byteCount + 2;
+                byteCount += 2;
             else
-                byteCount = byteCount + 4;
+                byteCount += 4;
            
             if (instanceID < 0xff)
-                byteCount = byteCount + 2;
+                byteCount += 2;
             else
-                byteCount = byteCount + 4;
+                byteCount += 4;
             if (attributeID != 0)
                 if (attributeID < 0xff)
-                    byteCount = byteCount + 2;
+                    byteCount += 2;
                 else
-                    byteCount = byteCount + 4;
+                    byteCount += 4;
 
             byte[] returnValue = new byte[byteCount];
             byteCount = 0;
@@ -1197,7 +1156,7 @@ namespace Sres.Net.EEIP
             {
                 returnValue[byteCount] = 0x20;
                 returnValue[byteCount+1] = (byte)classID;
-                byteCount = byteCount + 2;
+                byteCount += 2;
             }
             else
             {
@@ -1205,7 +1164,7 @@ namespace Sres.Net.EEIP
                 returnValue[byteCount + 1] = 0;                             //Padded Byte
                 returnValue[byteCount + 2] = (byte)classID;                 //LSB
                 returnValue[byteCount + 3] = (byte)(classID>>8);            //MSB
-                byteCount = byteCount + 4;
+                byteCount += 4;
             }
 
 
@@ -1213,7 +1172,7 @@ namespace Sres.Net.EEIP
             {
                 returnValue[byteCount] = 0x24;
                 returnValue[byteCount + 1] = (byte)instanceID;
-                byteCount = byteCount + 2;
+                byteCount += 2;
             }
             else
             {
@@ -1221,14 +1180,14 @@ namespace Sres.Net.EEIP
                 returnValue[byteCount + 1] = 0;                                //Padded Byte
                 returnValue[byteCount + 2] = ((byte)instanceID);                 //LSB
                 returnValue[byteCount + 3] = (byte)(instanceID >> 8);          //MSB
-                byteCount = byteCount + 4;
+                byteCount += 4;
             }
             if (attributeID != 0)
                 if (attributeID < 0xff)
                 {
                     returnValue[byteCount] = 0x30;
                     returnValue[byteCount + 1] = (byte)attributeID;
-                    byteCount = byteCount + 2;
+                    byteCount += 2;
                 }
                 else
                 {
@@ -1236,7 +1195,7 @@ namespace Sres.Net.EEIP
                     returnValue[byteCount + 1] = 0;                                 //Padded Byte
                     returnValue[byteCount + 2] = (byte)attributeID;                 //LSB
                     returnValue[byteCount + 3] = (byte)(attributeID >> 8);          //MSB
-                    byteCount = byteCount + 4;
+                    byteCount += 4;
                 }
 
             return returnValue;
@@ -1254,9 +1213,9 @@ namespace Sres.Net.EEIP
 
         private byte[] getUCMMreply(Encapsulation encapsulation,Encapsulation.CommonPacketFormat commonPacketFormat)
         {
-            byte[] dataToWrite = new byte[encapsulation.toBytes().Length + commonPacketFormat.toBytes().Length];
-            System.Buffer.BlockCopy(encapsulation.toBytes(), 0, dataToWrite, 0, encapsulation.toBytes().Length);
-            System.Buffer.BlockCopy(commonPacketFormat.toBytes(), 0, dataToWrite, encapsulation.toBytes().Length, commonPacketFormat.toBytes().Length);
+            byte[] dataToWrite = new byte[encapsulation.ToBytes().Length + commonPacketFormat.toBytes().Length];
+            System.Buffer.BlockCopy(encapsulation.ToBytes(), 0, dataToWrite, 0, encapsulation.ToBytes().Length);
+            System.Buffer.BlockCopy(commonPacketFormat.toBytes(), 0, dataToWrite, encapsulation.ToBytes().Length, commonPacketFormat.toBytes().Length);
 
             byte[] recvBuffer = new byte[564];
             stream.Write(dataToWrite, 0, dataToWrite.Length);
@@ -1264,7 +1223,8 @@ namespace Sres.Net.EEIP
 
             var statusCode = CIPGeneralStatusCodes.GetStatus(recvBuffer[42]);
 
-            if (!statusCode.ContainsKey(CIPGeneralStatusCodes.CIP_SERVICE_SUCCESS)) //Exception codes see "Table B-1.1 CIP General Status Codes"
+            //Exception codes see "Table B-1.1 CIP General Status Codes"
+            if (!statusCode.ContainsKey(CIPGeneralStatusCodes.CIP_SERVICE_SUCCESS)) 
             {
                 throw new CIPException(statusCode.Values.First());
             }

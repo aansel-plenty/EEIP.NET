@@ -13,8 +13,8 @@ namespace Sres.Net.EEIP
         public UInt16 Length { get; set; }
         public UInt32 SessionHandle { get; set; }
         public StatusEnum Status { get; }
-        private byte[] senderContext = new byte[8];
-        private UInt32 options = 0;
+        private byte[] SenderContext = new byte[8];
+        private UInt32 Options = 0;
         public List<byte> CommandSpecificData = new List<byte>();
 
         /// <summary>
@@ -48,40 +48,19 @@ namespace Sres.Net.EEIP
             Cancel = 0x0073
         }
 
-        public byte[] toBytes()
+        public byte[] ToBytes()
         {
-            byte[] returnValue = new byte[24 + CommandSpecificData.Count];
-            returnValue[0] = (byte)this.Command;
-            returnValue[1] = (byte)((UInt16)this.Command >> 8);
-            returnValue[2] = (byte)this.Length;
-            returnValue[3] = (byte)((UInt16)this.Length >> 8);
-            returnValue[4] = (byte)this.SessionHandle;
-            returnValue[5] = (byte)((UInt32)this.SessionHandle >> 8);
-            returnValue[6] = (byte)((UInt32)this.SessionHandle >> 16);
-            returnValue[7] = (byte)((UInt32)this.SessionHandle >> 24);
-            returnValue[8] = (byte)this.Status;
-            returnValue[9] = (byte)((UInt16)this.Status >> 8);
-            returnValue[10] = (byte)((UInt16)this.Status >> 16);
-            returnValue[11] = (byte)((UInt16)this.Status >> 24);
-            returnValue[12] = senderContext[0];
-            returnValue[13] = senderContext[1];
-            returnValue[14] = senderContext[2];
-            returnValue[15] = senderContext[3];
-            returnValue[16] = senderContext[4];
-            returnValue[17] = senderContext[5];
-            returnValue[18] = senderContext[6];
-            returnValue[19] = senderContext[7];
-            returnValue[20] = (byte)this.options;
-            returnValue[21] = (byte)((UInt16)this.options >> 8);
-            returnValue[22] = (byte)((UInt16)this.options >> 16);
-            returnValue[23] = (byte)((UInt16)this.options >> 24);
-            for (int i = 0; i < CommandSpecificData.Count; i++)
-            {
-                returnValue[24 + i] = CommandSpecificData[i];
-            }
-            return returnValue;
-        }
+            var data = new List<byte>();
+            data.AddRange(BitConverter.GetBytes((UInt16)this.Command));
+            data.AddRange(BitConverter.GetBytes((UInt16)this.Length));
+            data.AddRange(BitConverter.GetBytes((UInt32)this.SessionHandle));
+            data.AddRange(BitConverter.GetBytes((UInt32)this.Status));
+            data.AddRange(SenderContext);
+            data.AddRange(BitConverter.GetBytes((UInt32)this.Options));
+            data.AddRange(CommandSpecificData);
 
+            return data.ToArray();
+        }
 
         /// <summary>
         /// Table 2-4.4 CIP Identity Item
@@ -102,10 +81,9 @@ namespace Sres.Net.EEIP
             public string ProductName1;                                     //Human readable description of device
             public byte State1;                                             //Current state of device
 
-
             public static CIPIdentityItem getCIPIdentityItem(int startingByte, byte[] receivedData)
             {
-                startingByte = startingByte + 2;            //Skipped ItemCount
+                startingByte += 2;            //Skipped ItemCount
                 CIPIdentityItem cipIdentityItem = new CIPIdentityItem();
                 cipIdentityItem.ItemTypeCode = Convert.ToUInt16(receivedData[0+startingByte]
                                                                     | (receivedData[1 + startingByte] << 8));
@@ -148,12 +126,7 @@ namespace Sres.Net.EEIP
             {
                 return ((byte)(address >> 24)).ToString()+"." + ((byte)(address >> 16)).ToString()+"."+((byte)(address >> 8)).ToString()+"."+((byte)(address)).ToString();
             }
-
-
         }
-
-
-
 
         /// <summary>
         /// Socket Address (see section 2-6.3.2)
@@ -177,7 +150,6 @@ namespace Sres.Net.EEIP
             public UInt16 SockaddrInfoItem_O_T = 0x8001; //8000 for O->T and 8001 for T->O - Volume 2 Table 2-6.9
             public UInt16 SockaddrInfoLength = 16;
             public SocketAddress SocketaddrInfo_O_T = null;
-
 
             public byte[] toBytes()
             {
@@ -223,7 +195,8 @@ namespace Sres.Net.EEIP
                     returnValue[10 + Data.Count + 18] = this.SocketaddrInfo_O_T.SIN_Zero[6];
                     returnValue[10 + Data.Count + 19] = this.SocketaddrInfo_O_T.SIN_Zero[7];
                 }
-                    return returnValue;
+                
+                return returnValue;
             }
         }
     }
