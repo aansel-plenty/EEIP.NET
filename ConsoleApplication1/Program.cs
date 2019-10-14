@@ -35,6 +35,13 @@ namespace ConsoleApplication1
             //Console.WriteLine("Read {0} bytes", response.Length);
             //Console.WriteLine(BitConverter.ToInt32(response, 0).ToString());
 
+            //read slightly more complicated tag (array access)
+            response = eeipClient.ReadTagSingle("opcArray[1,10000,100000]");
+            Console.WriteLine();
+            Console.WriteLine(BitConverter.ToString(response));
+            Console.WriteLine("Read {0} bytes", response.Length);
+            Console.WriteLine(BitConverter.ToInt32(response, 0).ToString());
+
             //read slightly more complicated tag (udt)
             response = eeipClient.ReadTagSingle("fromVision.heartbeat");
             Console.WriteLine();

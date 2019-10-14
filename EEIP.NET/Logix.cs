@@ -64,9 +64,9 @@ namespace Sres.Net.EEIP
         internal static byte[] GetRequestPath(string tagPath)
         {
             var requestPathData = new List<byte>();
-            var splitPath = tagPath.Split('.').ToList(); //remove udt and bit access junk
+            var splitPaths = tagPath.Split('.').ToList(); //remove udt and bit access junk
 
-            if (int.TryParse(splitPath.Last(), out var bit))  //check for bit level access
+            if (int.TryParse(splitPaths.Last(), out var bit))  //check for bit level access
             {
                 if (bit >= 0 & bit <= 31)
                 {
@@ -79,8 +79,27 @@ namespace Sres.Net.EEIP
             }
             else
             {
-                foreach (var path in splitPath)
+                foreach (var splitPath in splitPaths)
                 {
+                    var path = splitPath;
+                    var isArray = false;
+                    var arrayIndices = new List<int>();
+
+                    if (splitPath.IndexOf("[") != -1) //check for array
+                    {
+                        isArray = true;
+                        var startIndex = splitPath.IndexOf("[");
+                        if (splitPath.Last() != ']') //we must end on the closing square brace
+                        {
+                            throw new CIPException("End brace (]) misplaced in array!");
+                        }
+
+                        path = splitPath.Substring(0, startIndex);
+                        var stringIndices = splitPath.Substring(startIndex + 1, splitPath.Count() - startIndex - 2).Split(',');
+                        arrayIndices = stringIndices.Select(int.Parse).ToList();
+
+                        throw new CIPException("Array access not supported!");
+                    }
                     var padTagPath = (path.Length % 2 == 1);
                     var requestPathSize = (tagPath.Length + 2 + (padTagPath ? 1 : 0)) / 2;
 
