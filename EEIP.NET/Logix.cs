@@ -28,7 +28,109 @@ namespace Sres.Net.EEIP
             //TODO: read something
             var reply = client.GetAttributeList(0xAC, 0x0001, attributes);
 
-            this.RefreshTagRegistry = !(ControllerState.Equals(LastControllerState));
+            var replyService = reply[0];
+            var generalStatus = reply[2];
+            var extendedStatus = reply[3];
+            var numAttributes = reply[5] << 8 | reply[4];
+
+            var offset = 6;
+
+            //Check general status
+            if (!this.RefreshTagRegistry)
+            {
+                if (generalStatus == 0x05)
+                {
+                    Console.WriteLine("Read general status 0x05: Path not known, download is in progress");
+                }
+                else if (generalStatus == 0x10)
+                {
+                    Console.WriteLine("Read general status 0x10: Device state conflict, controller is password locked");
+                }
+            }
+            
+
+            //Read attribute 1
+            if ((reply[offset+1] << 8 | reply[offset]) == attributes[0])
+            {
+                offset += 2;
+                if ((reply[offset + 1] << 8 | reply[offset]) == CIPGeneralStatusCodes.CIP_SERVICE_SUCCESS) {
+                    offset += 2;
+                    this.ControllerState[0] = (reply[offset + 1] << 8 | reply[offset]);
+                }
+                else
+                {
+                    this.RefreshTagRegistry = true;
+                }
+            }
+            offset += 2;
+
+            //Read attribute 2
+            if ((reply[offset + 1] << 8 | reply[offset]) == attributes[1])
+            {
+                offset += 2;
+                if ((reply[offset + 1] << 8 | reply[offset]) == CIPGeneralStatusCodes.CIP_SERVICE_SUCCESS)
+                {
+                    offset += 2;
+                    this.ControllerState[1] = (reply[offset + 1] << 8 | reply[offset]);
+                }
+                else
+                {
+                    this.RefreshTagRegistry = true;
+                }
+            }
+            offset += 2;
+
+            //Read attribute 3
+            if ((reply[offset + 1] << 8 | reply[offset]) == attributes[2])
+            {
+                offset += 2;
+                if ((reply[offset + 1] << 8 | reply[offset]) == CIPGeneralStatusCodes.CIP_SERVICE_SUCCESS)
+                {
+                    offset += 2;
+                    this.ControllerState[2] = (reply[offset + 3] << 24 | reply[offset + 2] << 16 | reply[offset + 1] << 8 | reply[offset]);
+                }
+                else
+                {
+                    this.RefreshTagRegistry = true;
+                }
+            }
+            offset += 4;
+
+            //Read attribute 4
+            if ((reply[offset + 1] << 8 | reply[offset]) == attributes[3])
+            {
+                offset += 2;
+                if ((reply[offset + 1] << 8 | reply[offset]) == CIPGeneralStatusCodes.CIP_SERVICE_SUCCESS)
+                {
+                    offset += 2;
+                    this.ControllerState[3] = (reply[offset + 3] << 24 | reply[offset + 2] << 16 | reply[offset + 1] << 8 | reply[offset]);
+                }
+                else
+                {
+                    this.RefreshTagRegistry = true;
+                }
+            }
+            offset += 4;
+
+            //Read attribute 10
+            if ((reply[offset + 1] << 8 | reply[offset]) == attributes[4])
+            {
+                offset += 2;
+                if ((reply[offset + 1] << 8 | reply[offset]) == CIPGeneralStatusCodes.CIP_SERVICE_SUCCESS)
+                {
+                    offset += 2;
+                    this.ControllerState[4] = (reply[offset + 3] << 24 | reply[offset + 2] << 16 | reply[offset + 1] << 8 | reply[offset]);
+                }
+                else
+                {
+                    this.RefreshTagRegistry = true;
+                }
+            }
+
+            if (!ControllerState.Equals(LastControllerState))
+            {
+                this.RefreshTagRegistry = true;
+            }
 
             if (this.RefreshTagRegistry)
             {
