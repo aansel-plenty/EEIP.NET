@@ -1214,72 +1214,48 @@ namespace Sres.Net.EEIP
         /// <returns>Encrypted Request Path</returns>
         private static byte[] GetEPath(int classID, int instanceID, int attributeID)
         {
-            int byteCount = 0;
-            if (classID < 0xff)
-                byteCount += 2;
+            List<byte> returnData = new List<byte>();
+
+            if (classID <= byte.MaxValue)
+            {
+                returnData.Add(0x20);
+                returnData.Add((byte)classID);
+            }
             else
-                byteCount += 4;
-           
-            if (instanceID < 0xff)
-                byteCount += 2;
+            {
+                returnData.Add(0x21);
+                returnData.Add(0x00);
+                returnData.AddRange(BitConverter.GetBytes((UInt16)classID));
+            }
+
+            if (instanceID <= byte.MaxValue)
+            {
+                returnData.Add(0x24);
+                returnData.Add((byte)instanceID);
+            }
             else
-                byteCount += 4;
+            {
+                returnData.Add(0x25);
+                returnData.Add(0x00);
+                returnData.AddRange(BitConverter.GetBytes((UInt16)instanceID));
+            }
+
             if (attributeID != 0)
-                if (attributeID < 0xff)
-                    byteCount += 2;
-                else
-                    byteCount += 4;
-
-            byte[] returnValue = new byte[byteCount];
-            byteCount = 0;
-            if (classID < 0xff)
             {
-                returnValue[byteCount] = 0x20;
-                returnValue[byteCount+1] = (byte)classID;
-                byteCount += 2;
-            }
-            else
-            {
-                returnValue[byteCount] = 0x21;
-                returnValue[byteCount + 1] = 0;                             //Padded Byte
-                returnValue[byteCount + 2] = (byte)classID;                 //LSB
-                returnValue[byteCount + 3] = (byte)(classID>>8);            //MSB
-                byteCount += 4;
-            }
-
-
-            if (instanceID < 0xff)
-            {
-                returnValue[byteCount] = 0x24;
-                returnValue[byteCount + 1] = (byte)instanceID;
-                byteCount += 2;
-            }
-            else
-            {
-                returnValue[byteCount] = 0x25;
-                returnValue[byteCount + 1] = 0;                                //Padded Byte
-                returnValue[byteCount + 2] = ((byte)instanceID);                 //LSB
-                returnValue[byteCount + 3] = (byte)(instanceID >> 8);          //MSB
-                byteCount += 4;
-            }
-            if (attributeID != 0)
-                if (attributeID < 0xff)
+                if (attributeID <= byte.MaxValue)
                 {
-                    returnValue[byteCount] = 0x30;
-                    returnValue[byteCount + 1] = (byte)attributeID;
-                    byteCount += 2;
+                    returnData.Add(0x30);
+                    returnData.Add((byte)attributeID);
                 }
                 else
                 {
-                    returnValue[byteCount] = 0x31;
-                    returnValue[byteCount + 1] = 0;                                 //Padded Byte
-                    returnValue[byteCount + 2] = (byte)attributeID;                 //LSB
-                    returnValue[byteCount + 3] = (byte)(attributeID >> 8);          //MSB
-                    byteCount += 4;
+                    returnData.Add(0x31);
+                    returnData.Add(0x00);
+                    returnData.AddRange(BitConverter.GetBytes((UInt16)attributeID));
                 }
+            }
 
-            return returnValue;
-
+            return returnData.ToArray();
         }
 
         /// <summary>
@@ -1307,9 +1283,8 @@ namespace Sres.Net.EEIP
             commonPacketFormat.AddressItem = 0x0000; //Address item NULL (used for UCMM Messages)
             commonPacketFormat.AddressLength = 0x0000;
             commonPacketFormat.DataItem = 0xB2; //Data item
-
-            //Get lengths now that packet is built
             commonPacketFormat.DataLength = (UInt16)commonPacketFormat.Data.Count;  //Get common packet format data length
+
             header.Length = (UInt16)(16 + commonPacketFormat.DataLength); //Get encapsulated packet length
 
             return header;
