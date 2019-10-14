@@ -151,7 +151,7 @@ namespace Sres.Net.EEIP
             public UInt16 SockaddrInfoLength = 16;
             public SocketAddress SocketaddrInfo_O_T = null;
 
-            public byte[] toBytes()
+            public byte[] ToBytes()
             {
                 if (SocketaddrInfo_O_T != null)
                     ItemCount=3;

@@ -17,17 +17,32 @@ namespace Sres.Net.EEIP
             Read_Modify_Write_Tag_Service = 0x4E
         }
 
+        public Dictionary<string, LogixTag> TagRegistry = new Dictionary<string, LogixTag>();
+        private bool RefreshTagRegistry = true;
+        private List<int> LastControllerState = new List<int>() { 1, 1, 1, 1, 1 };
+        private List<int> ControllerState = new List<int>() { 0, 0, 0, 0, 0 };
+
         public bool CheckForControllerChange()
         {
             var attributes = new List<UInt16>() { 1, 2, 3, 4, 10 };
-            return true;
+            //TODO: read something
+
+            this.RefreshTagRegistry = !(ControllerState.Equals(LastControllerState));
+
+            if (this.RefreshTagRegistry)
+            {
+                TagRegistry.Clear();
+            }
+
+            LastControllerState = ControllerState;
+
+            return this.RefreshTagRegistry;
         }
     }
 
     public class LogixTag
     {
         public string TagName = "";
-        
         private UInt16 SymbolType = 0x00;
         public UInt32 InstanceID { get => (UInt16) (SymbolType & 0x0FFF); }
         public string DataKeyword
