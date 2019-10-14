@@ -251,14 +251,9 @@ namespace Sres.Net.EEIP
             sessionHandle = 0;
         }
 
-        public void ForwardOpen()
-        {
-            this.ForwardOpen(false);
-        }
-
         System.Net.Sockets.UdpClient udpClientReceive;
         bool udpClientReceiveClosed = false;
-        public void ForwardOpen(bool largeForwardOpen)
+        public void ForwardOpen()
         {
             udpClientReceiveClosed = false;
             ushort o_t_headerOffset = 2;                    //Zählt den Sequencecount und evtl 32bit header zu der Länge dazu
@@ -273,24 +268,8 @@ namespace Sres.Net.EEIP
             if (T_O_RealTimeFormat == RealTimeFormat.Heartbeat)
                 t_o_headerOffset = 0;
 
+            var largeForwardOpen = ((T_O_Length + t_o_headerOffset) > 504); //larger than standard packet
             int lengthOffset = (5 + (O_T_ConnectionType == ConnectionType.Null ? 0 : 2) + (T_O_ConnectionType == ConnectionType.Null ? 0 : 2));
-
-            Encapsulation encapsulation = new Encapsulation();
-            encapsulation.SessionHandle = sessionHandle;
-            encapsulation.Command = Encapsulation.CommandsEnum.SendRRData;
-            //!!!!!!-----Length Field at the end!!!!!!!!!!!!!
-            
-            //---------------Interface Handle CIP
-            encapsulation.CommandSpecificData.Add(0);
-            encapsulation.CommandSpecificData.Add(0);
-            encapsulation.CommandSpecificData.Add(0);
-            encapsulation.CommandSpecificData.Add(0);
-            //----------------Interface Handle CIP
-
-            //----------------Timeout
-            encapsulation.CommandSpecificData.Add(0);
-            encapsulation.CommandSpecificData.Add(0);
-            //----------------Timeout
 
             //Common Packet Format (Table 2-6.1)
             Encapsulation.CommonPacketFormat commonPacketFormat = new Encapsulation.CommonPacketFormat();
@@ -307,30 +286,16 @@ namespace Sres.Net.EEIP
 
 
 
-            //----------------CIP Command "Forward Open" (Service Code 0x54)
-            if (!largeForwardOpen)
-                commonPacketFormat.Data.Add(0x54);
-            //----------------CIP Command "Forward Open"  (Service Code 0x54)
-
-            //----------------CIP Command "large Forward Open" (Service Code 0x5B)
-            else
-                commonPacketFormat.Data.Add(0x5B);
-            //----------------CIP Command "large Forward Open"  (Service Code 0x5B)
-
-            //----------------Requested Path size
-            commonPacketFormat.Data.Add(2);
-            //----------------Requested Path size
-
+            commonPacketFormat.Data.Add((byte) (largeForwardOpen ? CIPConnectionServices.Large_Forward_Open : CIPConnectionServices.Forward_Open)); //commanded service
+            commonPacketFormat.Data.Add(2); //Requested Path size
             //----------------Path segment for Class ID
             commonPacketFormat.Data.Add(0x20);
             commonPacketFormat.Data.Add((byte)6);
             //----------------Path segment for Class ID
-
             //----------------Path segment for Instance ID
             commonPacketFormat.Data.Add(0x24);
             commonPacketFormat.Data.Add((byte)1);
             //----------------Path segment for Instance ID
-
             //----------------Priority and Time/Tick - Table 3-5.16 (Vol. 1)
             commonPacketFormat.Data.Add(0x03);
             //----------------Priority and Time/Tick
@@ -470,18 +435,8 @@ namespace Sres.Net.EEIP
             else
                 commonPacketFormat.SocketaddrInfo_O_T.SIN_Address = 0;
 
-            encapsulation.Length = (ushort)(commonPacketFormat.ToBytes().Length+6);//(ushort)(57 + (ushort)lengthOffset);
-            //20 04 24 01 2C 65 2C 6B
-
-            byte[] dataToWrite = new byte[encapsulation.ToBytes().Length + commonPacketFormat.ToBytes().Length];
-            System.Buffer.BlockCopy(encapsulation.ToBytes(), 0, dataToWrite, 0, encapsulation.ToBytes().Length);
-            System.Buffer.BlockCopy(commonPacketFormat.ToBytes(), 0, dataToWrite, encapsulation.ToBytes().Length, commonPacketFormat.ToBytes().Length);
-            //encapsulation.toBytes();
-            
-            stream.Write(dataToWrite, 0, dataToWrite.Length);
-            byte[] data = new Byte[564];
-
-            Int32 bytes = stream.Read(data, 0, data.Length);
+            var encapsulation = BuildUCMMHeader(Encapsulation.CommandsEnum.SendRRData, commonPacketFormat);
+            var data = GetUCMMreply(encapsulation, commonPacketFormat, false);
 
             //--------------------------BEGIN Error?
             if (data[42] != 0)      //Exception codes see "Table B-1.1 CIP General Status Codes"
@@ -539,11 +494,6 @@ namespace Sres.Net.EEIP
             var asyncResult = udpClientReceive.BeginReceive(new AsyncCallback(ReceiveCallbackClass1), s);
         }
 
-        public void LargeForwardOpen()
-        {
-            this.ForwardOpen(true);
-        }
-
         private ushort o_t_detectedLength;
         /// <summary>
         /// Detects the Length of the data Originator -> Target.
@@ -554,13 +504,9 @@ namespace Sres.Net.EEIP
         {
             if (o_t_detectedLength == 0)
             {
-                if (this.sessionHandle == 0)
-                    this.RegisterSession();
                 o_t_detectedLength = (ushort)(this.GetAttributeSingle(0x04, O_T_InstanceID, 3)).Length;
-                return o_t_detectedLength;
             }
-            else
-                return o_t_detectedLength;
+            return o_t_detectedLength;
         }
 
         private ushort t_o_detectedLength;
@@ -573,13 +519,9 @@ namespace Sres.Net.EEIP
         {
             if (t_o_detectedLength == 0)
             {
-                if (this.sessionHandle == 0)
-                    this.RegisterSession();
                 t_o_detectedLength = (ushort)(this.GetAttributeSingle(0x04, T_O_InstanceID, 3)).Length;
-                return t_o_detectedLength;
             }
-            else
-                return t_o_detectedLength;
+            return t_o_detectedLength;
         }
 
         private static UInt32 GetMulticastAddress(UInt32 deviceIPAddress)
@@ -612,22 +554,6 @@ namespace Sres.Net.EEIP
 
             int lengthOffset = (5 + (O_T_ConnectionType == ConnectionType.Null ? 0 : 2) + (T_O_ConnectionType == ConnectionType.Null ? 0 : 2));
 
-            Encapsulation encapsulation = new Encapsulation();
-            encapsulation.SessionHandle = sessionHandle;
-            encapsulation.Command = Encapsulation.CommandsEnum.SendRRData;
-            encapsulation.Length = (ushort)(16 +17+ (ushort)lengthOffset);
-            //---------------Interface Handle CIP
-            encapsulation.CommandSpecificData.Add(0);
-            encapsulation.CommandSpecificData.Add(0);
-            encapsulation.CommandSpecificData.Add(0);
-            encapsulation.CommandSpecificData.Add(0);
-            //----------------Interface Handle CIP
-
-            //----------------Timeout
-            encapsulation.CommandSpecificData.Add(0);
-            encapsulation.CommandSpecificData.Add(0);
-            //----------------Timeout
-
             //Common Packet Format (Table 2-6.1)
             Encapsulation.CommonPacketFormat commonPacketFormat = new Encapsulation.CommonPacketFormat();
             commonPacketFormat.ItemCount = 0x02;
@@ -639,15 +565,9 @@ namespace Sres.Net.EEIP
             commonPacketFormat.DataItem = 0xB2;
             commonPacketFormat.DataLength = (ushort)(17 + (ushort)lengthOffset);
 
+            commonPacketFormat.Data.Add((byte) CIPConnectionServices.Forward_Close);
+            commonPacketFormat.Data.Add(2); // Requested Path size
 
-
-            //----------------CIP Command "Forward Close"
-            commonPacketFormat.Data.Add(0x4E);
-            //----------------CIP Command "Forward Close"
-
-            //----------------Requested Path size
-            commonPacketFormat.Data.Add(2);
-            //----------------Requested Path size
 
             //----------------Path segment for Class ID
             commonPacketFormat.Data.Add(0x20);
@@ -707,21 +627,8 @@ namespace Sres.Net.EEIP
                 commonPacketFormat.Data.Add((byte)(T_O_InstanceID));
             }
 
-            byte[] dataToWrite = new byte[encapsulation.ToBytes().Length + commonPacketFormat.ToBytes().Length];
-            System.Buffer.BlockCopy(encapsulation.ToBytes(), 0, dataToWrite, 0, encapsulation.ToBytes().Length);
-            System.Buffer.BlockCopy(commonPacketFormat.ToBytes(), 0, dataToWrite, encapsulation.ToBytes().Length, commonPacketFormat.ToBytes().Length);
-            encapsulation.ToBytes();
-
-            stream.Write(dataToWrite, 0, dataToWrite.Length);
-            byte[] data = new Byte[564];
-
-            Int32 bytes = stream.Read(data, 0, data.Length);
-
-            //--------------------------BEGIN Error?
-            if (data[42] != 0)      //Exception codes see "Table B-1.1 CIP General Status Codes"
-            {
-                throw new CIPException(CIPGeneralStatusCodes.GetStatusName(data[42]));
-            }
+            var encapsulation = BuildUCMMHeader(Encapsulation.CommandsEnum.SendRRData, commonPacketFormat);
+            var recvData = GetUCMMreply(encapsulation, commonPacketFormat);
 
             //Close the Socket for Receive
             udpClientReceiveClosed = true;
@@ -1053,7 +960,13 @@ namespace Sres.Net.EEIP
 
             return header;
         }
-        protected byte[] GetUCMMreply(Encapsulation encapsulation,Encapsulation.CommonPacketFormat commonPacketFormat)
+
+        protected byte[] GetUCMMreply(Encapsulation encapsulation, Encapsulation.CommonPacketFormat commonPacketFormat)
+        {
+            return GetUCMMreply(encapsulation, commonPacketFormat, true);
+        }
+
+        protected byte[] GetUCMMreply(Encapsulation encapsulation,Encapsulation.CommonPacketFormat commonPacketFormat, bool checkResponse)
         {
             if (this.sessionHandle == 0) //If a Session is not registered, Try to Register a Session with the predefined IP-Address and Port
                 this.RegisterSession();

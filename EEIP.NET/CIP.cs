@@ -37,6 +37,21 @@ namespace Sres.Net.EEIP
         GroupSync = 0x1C
     }
 
+    /// <summary>
+    /// Table 3-5.5. Connection Manager Object Instance Object Specific Services
+    /// </summary>
+    public enum CIPConnectionServices : byte
+    {
+        Forward_Close = 0x4E,
+        Unconnected_Send = 0x52,
+        Forward_Open = 0x54,
+        Get_Connection_Data = 0x56,
+        Search_Connection_data = 0x57,
+        Ex_Forward_Open = 0x59,
+        Get_Connection_Owner = 0x5A,
+        Large_Forward_Open = 0x5B
+    }
+
     public class CIPException : Exception
     {
         public CIPException()
