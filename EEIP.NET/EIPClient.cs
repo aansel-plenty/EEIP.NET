@@ -643,7 +643,6 @@ namespace Sres.Net.EEIP
             stopUDP = false;
             uint sequenceCount = 0;
 
-
             while (!stopUDP)
             {
                 byte[] o_t_IOData = new byte[564];
@@ -761,9 +760,6 @@ namespace Sres.Net.EEIP
                     {
                         T_O_IOData[i] = receiveBytes[20 + i + headerOffset];
                     }
-                    //Console.WriteLine(T_O_IOData[0]);
-
-
                 }
             }
             LastReceivedImplicitMessage = DateTime.Now;
@@ -883,7 +879,7 @@ namespace Sres.Net.EEIP
         /// <param name="instanceID">Requested Instance ID</param>
         /// <param name="attributeID">Requested Attribute ID - if "0" the attribute will be ignored</param>
         /// <returns>Encrypted Request Path</returns>
-        private static byte[] GetEPath(int classID, int instanceID, int attributeID)
+        protected static byte[] GetEPath(int classID, int instanceID, int attributeID)
         {
             List<byte> returnData = new List<byte>();
 
@@ -975,7 +971,7 @@ namespace Sres.Net.EEIP
             System.Buffer.BlockCopy(encapsulation.ToBytes(), 0, dataToWrite, 0, encapsulation.ToBytes().Length);
             System.Buffer.BlockCopy(commonPacketFormat.ToBytes(), 0, dataToWrite, encapsulation.ToBytes().Length, commonPacketFormat.ToBytes().Length);
 
-            byte[] recvBuffer = new byte[564];
+            byte[] recvBuffer = new byte[1024];
             stream.Write(dataToWrite, 0, dataToWrite.Length);
             var recvLength = stream.Read(recvBuffer, 0, recvBuffer.Length);
 

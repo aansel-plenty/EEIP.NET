@@ -58,6 +58,7 @@ namespace ConsoleApplication1
             Console.WriteLine(BitConverter.ToString(response));
             Console.WriteLine("Read {0} bytes", response.Length);
             var testEIPwrite = BitConverter.ToInt32(response, 0);
+            var testval = testEIPwrite;
             Console.WriteLine(testEIPwrite);
 
             //now write to the tag
@@ -104,14 +105,62 @@ namespace ConsoleApplication1
             stopWatch.Start();
             
             //Test read and write latency
-            for (int i = 0; i < 100; i++)
+            //for (int i = 0; i <= 100; i++)
+            //{
+            //    response = plc.ReadTagSingle("testEIPWrite");
+            //    var readVal = BitConverter.ToInt32(response, 0);
+            //    var writeVal = readVal + 1;
+            //    testval = writeVal;
+            //    plc.WriteTagSingle("testEIPWrite", 0x00C4, BitConverter.GetBytes(writeVal));
+            //    //Console.WriteLine("Read {0}, Wrote {1}",readVal,writeVal);
+            //    //Console.WriteLine("Elapsed time {0} ms", stopWatch.ElapsedMilliseconds);
+            //}
+            //
+            //Console.WriteLine("Elapsed time {0} ms", stopWatch.ElapsedMilliseconds);
+            
+            var readTags = new List<string>() { "testEIPWrite","fromVision"};
+            var writeTags = new List<Tuple<string, UInt16, byte[]>>();
+            writeTags.Add(Tuple.Create("testEIPwrite", (UInt16)0x00C4, BitConverter.GetBytes(testval)));
+            var resp = plc.MultiReadWrite(readTags, writeTags);
+            Console.WriteLine();
+            Console.WriteLine("Multi read/write succeeded!");
+            Console.WriteLine(BitConverter.ToString(resp));
+            var numTags = resp[1] << 8 | resp[0];
+            for (int i = 0; i < numTags; i++)
             {
-                response = plc.ReadTagSingle("testEIPWrite");
-                var readVal = BitConverter.ToInt32(response, 0);
-                var writeVal = readVal + 1;
-                plc.WriteTagSingle("testEIPWrite", 0x00C4, BitConverter.GetBytes(writeVal));
-                //Console.WriteLine("Read {0}, Wrote {1}",readVal,writeVal);
-                //Console.WriteLine("Elapsed time {0} ms", stopWatch.ElapsedMilliseconds);
+                var offset = 2 + 2 * i;
+                var offsetIndex = ((resp[offset + 1] << 8) | resp[offset]);
+                if (resp[offsetIndex] == 0xCC)
+                {
+                    if (resp[offsetIndex + 4] == 0xC4)
+                    {
+                        var readval = BitConverter.ToInt32(resp.ToArray(), offsetIndex + 6);
+                        //Console.WriteLine(readval);
+                    }
+                }
+            }
+
+            //Time 100 multi read writes
+            stopWatch.Restart();
+
+            for (int i = 0; i <= 100; i++)
+            {
+                writeTags[0] = (Tuple.Create("testEIPwrite",(UInt16) 0x00C4, BitConverter.GetBytes(testval++)));
+                resp = plc.MultiReadWrite(readTags, writeTags);
+                numTags = resp[1] << 8 | resp[0];
+                for (int j = 0; j < numTags; j++)
+                {
+                    var offset = 2 + 2 * j;
+                    var offsetIndex = ((resp[offset + 1] << 8) | resp[offset]);
+                    if (resp[offsetIndex] == 0xCC)
+                    {
+                        if (resp[offsetIndex+4] == 0xC4)
+                        {
+                            var readval = BitConverter.ToInt32(resp.ToArray(), offsetIndex + 6);
+                            //Console.WriteLine(readval);
+                        }
+                    }  
+                }
             }
             
             Console.WriteLine("Elapsed time {0} ms",stopWatch.ElapsedMilliseconds);

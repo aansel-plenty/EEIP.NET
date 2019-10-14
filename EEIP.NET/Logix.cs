@@ -85,7 +85,6 @@ namespace Sres.Net.EEIP
                 }
             }
             
-
             //Read attribute 1
             if ((reply[offset+1] << 8 | reply[offset]) == attributes[0])
             {
@@ -263,18 +262,24 @@ namespace Sres.Net.EEIP
             return requestPathData.ToArray();
         }
 
+        internal List<byte> BuildReadTagData(string tagPath)
+        {
+            var data = new List<byte>();
+
+            var requestPathData = GetRequestPath(tagPath);
+            data.Add((byte)Logix.Logix5000Services.Read_Tag_Service); //requested service
+            data.Add((byte)(requestPathData.Length / 2)); //Requested Path size (number of 16 bit words)
+            data.AddRange(requestPathData); //Request Path
+            data.AddRange(BitConverter.GetBytes((Int16)0x0001)); //Number of elements to read
+
+            return data;
+        }
+
         public byte[] ReadTagSingle(string tagPath)
         {
             Encapsulation.CommonPacketFormat commonPacketFormat = new Encapsulation.CommonPacketFormat();
 
-            var requestPathData = GetRequestPath(tagPath);
-
-            //Common Packet Format Data
-            commonPacketFormat.Data.Add((byte)Logix.Logix5000Services.Read_Tag_Service); //requested service
-            commonPacketFormat.Data.Add((byte)(requestPathData.Length / 2)); //Requested Path size (number of 16 bit words)
-            //Request Path
-            commonPacketFormat.Data.AddRange(requestPathData); //Request Path
-            commonPacketFormat.Data.AddRange(BitConverter.GetBytes((Int16)0x0001)); //Number of elements to read
+            commonPacketFormat.Data.AddRange(BuildReadTagData(tagPath));
 
             var encapsulation = BuildUCMMHeader(Encapsulation.CommandsEnum.SendRRData, commonPacketFormat);
             var recvData = GetUCMMreply(encapsulation, commonPacketFormat);
@@ -303,25 +308,77 @@ namespace Sres.Net.EEIP
             return returnData;
         }
 
+        internal List<byte> BuildWriteTagData(string tagPath, UInt16 tagType, byte[] tagData)
+        {
+            var data = new List<byte>();
+
+            var requestPathData = GetRequestPath(tagPath);
+            data.Add((byte)Logix.Logix5000Services.Write_Tag_Service); //requested service
+            data.Add((byte)(requestPathData.Length / 2)); //Requested Path size (number of 16 bit words)
+            data.AddRange(requestPathData); //Request Path
+            data.AddRange(BitConverter.GetBytes(tagType)); //get the type of the tag
+            data.AddRange(BitConverter.GetBytes((Int16)0x0001)); //Number of elements to write
+            data.AddRange(tagData);
+
+            return data;
+        }
+
         public bool WriteTagSingle(string tagPath, UInt16 tagType, byte[] tagData)
         {
             Encapsulation.CommonPacketFormat commonPacketFormat = new Encapsulation.CommonPacketFormat();
 
             var requestPathData = GetRequestPath(tagPath);
 
-            //Common Packet Format Data
-            commonPacketFormat.Data.Add((byte)Logix.Logix5000Services.Write_Tag_Service); //requested service
-            commonPacketFormat.Data.Add((byte)(requestPathData.Length / 2)); //Requested Path size (number of 16 bit words)
-            //Request Path
-            commonPacketFormat.Data.AddRange(requestPathData); //Request Path
-            commonPacketFormat.Data.AddRange(BitConverter.GetBytes(tagType)); //get the type of the tag
-            commonPacketFormat.Data.AddRange(BitConverter.GetBytes((Int16)0x0001)); //Number of elements to write
-            commonPacketFormat.Data.AddRange(tagData);
+            commonPacketFormat.Data.AddRange(BuildWriteTagData(tagPath, tagType, tagData));
 
             var encapsulation = BuildUCMMHeader(Encapsulation.CommandsEnum.SendRRData, commonPacketFormat);
             var recvData = GetUCMMreply(encapsulation, commonPacketFormat);
 
             return true;
+        }
+
+        public byte[] MultiReadWrite(List<string> readTags, List<Tuple<string,UInt16,byte[]>> writeTags)
+        {
+            var services = new List<byte[]>();
+            //add all read services
+            foreach (var tag in readTags)
+            {
+                services.Add(BuildReadTagData(tag).ToArray());
+            }
+            foreach (var tag in writeTags)
+            {
+                services.Add(BuildWriteTagData(tag.Item1, tag.Item2, tag.Item3).ToArray());
+            }
+            return MultiServicePacket(services);
+        }
+
+        public byte[] MultiServicePacket(List<byte[]> services)
+        {
+            Encapsulation.CommonPacketFormat commonPacketFormat = new Encapsulation.CommonPacketFormat();
+            var requestPathData = GetEPath(0x02,0x01,0x00);
+
+            //Common Packet Format Data
+            commonPacketFormat.Data.Add((byte)CIPCommonServices.Multiple_Service_Packet); //requested service
+            commonPacketFormat.Data.Add(0x02); //Requested Path size (number of 16 bit words)
+            //Request Path
+            commonPacketFormat.Data.AddRange(requestPathData); //Request Path
+            commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt16)services.Count()));
+
+            var offset = 2 + 2 * services.Count();
+            foreach (var service in services) //Add length of each service
+            {
+                commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt16)offset));
+                offset += service.Length;
+            }
+            foreach (var service in services)
+            {
+                commonPacketFormat.Data.AddRange(service);
+            }
+
+            var encapsulation = BuildUCMMHeader(Encapsulation.CommandsEnum.SendRRData, commonPacketFormat);
+            var recvData = GetUCMMreply(encapsulation, commonPacketFormat);
+
+            return recvData.Skip(44).ToArray();
         }
     }
 
