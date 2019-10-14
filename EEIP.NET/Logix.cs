@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace Sres.Net.EEIP
 {
-    class Logix
+    public class Logix
     {
         public enum Logix5000Services : byte
         {
@@ -82,12 +82,11 @@ namespace Sres.Net.EEIP
                 foreach (var splitPath in splitPaths)
                 {
                     var path = splitPath;
-                    var isArray = false;
+                    var isArray = (splitPath.IndexOf("[") != -1); //square brace means this path segment contains an array
                     var arrayIndices = new List<int>();
 
-                    if (splitPath.IndexOf("[") != -1) //check for array
+                    if (isArray) //check for array
                     {
-                        isArray = true;
                         var startIndex = splitPath.IndexOf("[");
                         if (splitPath.Last() != ']') //we must end on the closing square brace
                         {
@@ -97,8 +96,6 @@ namespace Sres.Net.EEIP
                         path = splitPath.Substring(0, startIndex);
                         var stringIndices = splitPath.Substring(startIndex + 1, splitPath.Count() - startIndex - 2).Split(',');
                         arrayIndices = stringIndices.Select(int.Parse).ToList();
-
-                        throw new CIPException("Array access not supported!");
                     }
                     var padTagPath = (path.Length % 2 == 1);
                     var requestPathSize = (tagPath.Length + 2 + (padTagPath ? 1 : 0)) / 2;
@@ -107,6 +104,28 @@ namespace Sres.Net.EEIP
                     requestPathData.Add((byte)path.Length); //number of chars in tag path
                     requestPathData.AddRange(Encoding.ASCII.GetBytes(path)); //tag path string
                     if (padTagPath) requestPathData.Add(0x00); //add pad byte if odd number of bytes
+
+                    if (isArray)
+                    {
+                        foreach (var arrayIndex in arrayIndices)
+                        {
+                            if (arrayIndex <= byte.MaxValue)
+                            {
+                                requestPathData.Add(0x28);
+                                requestPathData.Add((byte)arrayIndex);
+                            }
+                            else if (arrayIndex <= UInt16.MaxValue)
+                            {
+                                requestPathData.Add(0x29);
+                                requestPathData.AddRange(BitConverter.GetBytes((UInt16)arrayIndex));
+                            }
+                            else
+                            {
+                                requestPathData.Add(0x2A);
+                                requestPathData.AddRange(BitConverter.GetBytes((UInt32)arrayIndex));
+                            }
+                        }
+                    }
                 }
             }
 
