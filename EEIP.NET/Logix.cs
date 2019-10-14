@@ -183,10 +183,19 @@ namespace Sres.Net.EEIP
         /// Builds request path for tag access (r/w)
         /// Logix 5000 Controllers Data Access 1756-PM020F-EN-P
         /// </summary>
-        internal static byte[] GetRequestPath(string tagPath)
+        public byte[] GetRequestPath(string tagPath)
         {
             var requestPathData = new List<byte>();
             var splitPaths = tagPath.Split('.').ToList(); //remove udt and bit access junk
+
+            //Check if tag exists in the registry
+            //if (TagRegistry.TryGetValue(tagPath,out LogixTag logixTag))
+            //{
+            //    if (logixTag.DataKeyword == "STRUCT" & logixTag.InstanceID != 0)
+            //    {
+            //
+            //    }
+            //}
 
             if (int.TryParse(splitPaths.Last(), out var bit))  //check for bit level access
             {
@@ -273,9 +282,23 @@ namespace Sres.Net.EEIP
             var tagTypeServiceParam = (UInt16)(recvData[45] << 8 | recvData[44]);
             var isUDT = (tagTypeServiceParam == 0x02A0);
             var replyDataOffset = isUDT ? 48 : 46;
+            var returnData = new byte[recvData.Length - replyDataOffset];
 
-            byte[] returnData = new byte[recvData.Length - replyDataOffset];
+            if (!TagRegistry.ContainsKey(tagPath))
+            {
+                TagRegistry[tagPath] = new LogixTag()
+                {
+                    TagName = tagPath,
+                    SymbolType = tagTypeServiceParam,
+                    StructureHandle = (UInt16)(isUDT ? ((recvData[47] << 8) | recvData[46]) : 0x0000)
+                };
+            }
+
             System.Buffer.BlockCopy(recvData, replyDataOffset, returnData, 0, recvData.Length - replyDataOffset);
+
+            var tag = TagRegistry[tagPath];
+            tag.rawData = returnData.ToList();
+            tag.UpdateValue();
 
             return returnData;
         }
@@ -305,13 +328,13 @@ namespace Sres.Net.EEIP
     public class LogixTag
     {
         public string TagName = "";
-        private UInt16 SymbolType = 0x00;
+        public UInt16 SymbolType = 0x00;
         public UInt32 InstanceID { get => (UInt16) (SymbolType & 0x0FFF); }
         public string DataKeyword
         { 
             get 
             {
-                var success = Logix.TagTypes.TryGetValue((byte) (SymbolType & 0xF),out var returnValue);
+                var success = Logix.TagTypes.TryGetValue((byte) (SymbolType & 0xFF),out var returnValue);
                 if (success)
                 {
                     return returnValue.Item1;
@@ -327,6 +350,48 @@ namespace Sres.Net.EEIP
         public int ArrayNumDims { get => ((SymbolType >> 13) & 0x3); }
         public bool IsAtomic { get => ((SymbolType >> 15) & 0x1) == 0; }
         public bool IsStruct { get => ((SymbolType >> 15) & 0x1) != 0; }
-        private UInt16 StructureHandle = 0x00;
+        public UInt16 StructureHandle;
+
+        public List<byte> rawData = new List<byte>();
+        private object LastValue;
+        public object Value;
+
+        public void UpdateValue()
+        {
+            switch (DataKeyword)
+            {
+                case "STRUCT":
+                    Value = rawData;
+                    break;
+                case "BOOL":
+                    Value = (bool) (rawData[0] > 0);
+                    break;
+                case "SINT":
+                    Value = rawData[0];
+                    break;
+                case "INT":
+                    Value = BitConverter.ToInt16(rawData.ToArray(), 0);
+                    break;
+                case "DINT":
+                    Value = BitConverter.ToInt32(rawData.ToArray(), 0);
+                    break;
+                case "LINT":
+                    Value = BitConverter.ToInt64(rawData.ToArray(), 0);
+                    break;
+                case "REAL":
+                    Value = BitConverter.ToSingle(rawData.ToArray(), 0);
+                    break;
+                case "STRING": //TODO: double check this. definitely going to be wrong
+                    Value = BitConverter.ToString(rawData.ToArray(), 0);
+                    break;
+                default:
+                    break;
+            }
+            if (!Value.Equals(LastValue))
+            {
+                //value has changed
+                LastValue = Value;
+            }
+        }
     }
 }

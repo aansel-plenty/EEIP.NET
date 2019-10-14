@@ -69,6 +69,12 @@ namespace ConsoleApplication1
             Console.WriteLine(BitConverter.ToString(response));
             Console.WriteLine("Read {0} bytes", response.Length);
 
+            //read simple udt
+            response = plc.ReadTagSingle("fromVision.towerCamera[0].offset1");
+            Console.WriteLine();
+            Console.WriteLine(BitConverter.ToString(response));
+            Console.WriteLine("Read {0} bytes", response.Length);
+
             //read simple udt to be able to write to it
             response = plc.ReadTagSingle("fromVision");
             Console.WriteLine();
