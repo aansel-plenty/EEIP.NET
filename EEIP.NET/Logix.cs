@@ -22,10 +22,11 @@ namespace Sres.Net.EEIP
         private List<int> LastControllerState = new List<int>() { 1, 1, 1, 1, 1 };
         private List<int> ControllerState = new List<int>() { 0, 0, 0, 0, 0 };
 
-        public bool CheckForControllerChange()
+        public bool CheckForControllerChange(EEIPClient client)
         {
             var attributes = new List<UInt16>() { 1, 2, 3, 4, 10 };
             //TODO: read something
+            var reply = client.GetAttributeList(0xAC, 0x0001, attributes);
 
             this.RefreshTagRegistry = !(ControllerState.Equals(LastControllerState));
 

@@ -14,12 +14,16 @@ namespace ConsoleApplication1
         static void Main(string[] args)
         {
             var eeipClient = new EEIPClient();
+            var plc = new Logix();
+
             eeipClient.IPAddress = "10.100.21.30";
             eeipClient.RegisterSession();
 
             byte[] response = eeipClient.GetAttributeSingle(0x01, 1, 1);
             var resp_identity = (response[1] << 8 | response[0]).ToString();
             Console.WriteLine("Revision of identity object is " + resp_identity);
+
+            var refresh = plc.CheckForControllerChange(eeipClient);
 
             //read simple tag
             response = eeipClient.ReadTagSingle("testEIPRead");

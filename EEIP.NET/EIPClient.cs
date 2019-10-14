@@ -210,7 +210,6 @@ namespace Sres.Net.EEIP
         /// <summary>
         /// Sends a RegisterSession command to a target to initiate session
         /// </summary>
-        /// <param name="address">IP-Address of the target device</param>
         /// <returns>Session Handle</returns>	
         public UInt32 RegisterSession()
         {
@@ -330,7 +329,7 @@ namespace Sres.Net.EEIP
             //----------------Path segment for Instance ID
             commonPacketFormat.Data.Add(0x24);
             commonPacketFormat.Data.Add((byte)1);
-            //----------------Path segment for Instace ID
+            //----------------Path segment for Instance ID
 
             //----------------Priority and Time/Tick - Table 3-5.16 (Vol. 1)
             commonPacketFormat.Data.Add(0x03);
@@ -1044,78 +1043,31 @@ namespace Sres.Net.EEIP
         /// <param name="classID">Class id of requested Attributes</param> 
         /// <param name="instanceID">Instance of Requested Attributes (0 for class Attributes)</param> 
         /// <returns>Reply Data</returns>	
-        public byte[] GetAttributeList(int classID, int instanceID)
+        public byte[] GetAttributeList(int classID, int instanceID, List<UInt16> attributes)
         {
-            byte[] requestedPath = GetEPath(classID, instanceID, 0);
             if (sessionHandle == 0) //If a Session is not Registered, Try to Registers a Session with the predefined IP-Address and Port
                 this.RegisterSession();
 
-            Encapsulation encapsulation = new Encapsulation();
-            encapsulation.SessionHandle = sessionHandle;
-            encapsulation.Command = Encapsulation.CommandsEnum.SendRRData;
-            encapsulation.Length = (UInt16)(18 + requestedPath.Length);
-            //---------------Interface Handle CIP
-            encapsulation.CommandSpecificData.Add(0);
-            encapsulation.CommandSpecificData.Add(0);
-            encapsulation.CommandSpecificData.Add(0);
-            encapsulation.CommandSpecificData.Add(0);
-            //----------------Interface Handle CIP
-
-            //----------------Timeout
-            encapsulation.CommandSpecificData.Add(0);
-            encapsulation.CommandSpecificData.Add(0);
-            //----------------Timeout
-
-            //Common Packet Format (Table 2-6.1)
             Encapsulation.CommonPacketFormat commonPacketFormat = new Encapsulation.CommonPacketFormat();
-            commonPacketFormat.ItemCount = 0x02;
 
-            commonPacketFormat.AddressItem = 0x0000;        //NULL (used for UCMM Messages)
-            commonPacketFormat.AddressLength = 0x0000;
+            var requestPathData = GetEPath(classID, instanceID, 0);
 
-            commonPacketFormat.DataItem = 0xB2;
-            commonPacketFormat.DataLength = (UInt16)(2 + requestedPath.Length); //WAS 6
+            //Common Packet Format Data
+            commonPacketFormat.Data.Add((byte)CIPCommonServices.Get_Attribute_List); //requested service
+            commonPacketFormat.Data.Add((byte)(requestPathData.Length / 2)); //Requested Path size (number of 16 bit words)
+            //Request Path
+            commonPacketFormat.Data.AddRange(requestPathData); //Request Path
+            commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt16) attributes.Count())); //Number of attributes to grab
 
-
-
-            //----------------CIP Command "Get Attribute All"
-            commonPacketFormat.Data.Add((byte)Sres.Net.EEIP.CIPCommonServices.Get_Attributes_All);
-            //----------------CIP Command "Get Attribute All"
-
-            //----------------Requested Path size
-            commonPacketFormat.Data.Add((byte)(requestedPath.Length / 2));
-            //----------------Requested Path size
-
-            //----------------Path segment for Class ID
-            //----------------Path segment for Class ID
-
-            //----------------Path segment for Instance ID
-            //----------------Path segment for Instace ID
-            for (int i = 0; i < requestedPath.Length; i++)
+            foreach (var attribute in attributes)
             {
-                commonPacketFormat.Data.Add(requestedPath[i]);
+                commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt16)attribute)); //attribute ID
             }
 
-            byte[] dataToWrite = new byte[encapsulation.ToBytes().Length + commonPacketFormat.ToBytes().Length];
-            System.Buffer.BlockCopy(encapsulation.ToBytes(), 0, dataToWrite, 0, encapsulation.ToBytes().Length);
-            System.Buffer.BlockCopy(commonPacketFormat.ToBytes(), 0, dataToWrite, encapsulation.ToBytes().Length, commonPacketFormat.ToBytes().Length);
+            var encapsulation = BuildUCMMHeader(Encapsulation.CommandsEnum.SendRRData, commonPacketFormat);
+            var recvData = GetUCMMreply(encapsulation, commonPacketFormat);
 
-
-            stream.Write(dataToWrite, 0, dataToWrite.Length);
-            byte[] data = new Byte[564];
-
-            Int32 bytes = stream.Read(data, 0, data.Length);
-            //--------------------------BEGIN Error?
-            if (data[42] != 0)      //Exception codes see "Table B-1.1 CIP General Status Codes"
-            {
-                throw new CIPException(CIPGeneralStatusCodes.GetStatusName(data[42]));
-            }
-            //--------------------------END Error?
-
-            byte[] returnData = new byte[bytes - 44];
-            System.Buffer.BlockCopy(data, 44, returnData, 0, bytes - 44);
-
-            return returnData;
+            return recvData.Skip(40).ToArray(); //Start at repply service in the message reply field
         }
 
         public byte[] SetAttributeSingle(int classID, int instanceID, int attributeID, byte[] value)
@@ -1290,7 +1242,7 @@ namespace Sres.Net.EEIP
             return header;
         }
 
-        private byte[] getUCMMreply(Encapsulation encapsulation,Encapsulation.CommonPacketFormat commonPacketFormat)
+        private byte[] GetUCMMreply(Encapsulation encapsulation,Encapsulation.CommonPacketFormat commonPacketFormat)
         {
             byte[] dataToWrite = new byte[encapsulation.ToBytes().Length + commonPacketFormat.ToBytes().Length];
             System.Buffer.BlockCopy(encapsulation.ToBytes(), 0, dataToWrite, 0, encapsulation.ToBytes().Length);
@@ -1328,7 +1280,7 @@ namespace Sres.Net.EEIP
             commonPacketFormat.Data.AddRange(BitConverter.GetBytes((Int16)0x0001)); //Number of elements to read
 
             var encapsulation = BuildUCMMHeader(Encapsulation.CommandsEnum.SendRRData, commonPacketFormat);
-            var recvData = getUCMMreply(encapsulation, commonPacketFormat);
+            var recvData = GetUCMMreply(encapsulation, commonPacketFormat);
 
             var tagTypeServiceParam = (UInt16) (recvData[45] << 8 | recvData[44]);
             var isUDT = (tagTypeServiceParam == 0x02A0);
@@ -1359,7 +1311,7 @@ namespace Sres.Net.EEIP
             commonPacketFormat.Data.AddRange(tagData);
 
             var encapsulation = BuildUCMMHeader(Encapsulation.CommandsEnum.SendRRData, commonPacketFormat);
-            var recvData = getUCMMreply(encapsulation,commonPacketFormat);
+            var recvData = GetUCMMreply(encapsulation,commonPacketFormat);
             
             return true;
         }
