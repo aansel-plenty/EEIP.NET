@@ -1303,17 +1303,13 @@ namespace Sres.Net.EEIP
             commonPacketFormat.DataItem = 0xB2; //Data item
             //commonPacketFormat.DataLength
 
-            var padTagPath = (tagPath.Length % 2 == 1);
-            var requestPathSize = (tagPath.Length + 2 + (padTagPath ? 1 : 0)) / 2;
+            var requestPathData = LogixTag.GetRequestPath(tagPath);
 
             //Common Packet Format Data
             commonPacketFormat.Data.Add((byte)Logix.Logix5000Services.Write_Tag_Service); //requested service
-            commonPacketFormat.Data.Add((byte)(requestPathSize)); //Requested Path size (number of 16 bit words)
+            commonPacketFormat.Data.Add((byte)(requestPathData.Length/2)); //Requested Path size (number of 16 bit words)
             //Request Path
-            commonPacketFormat.Data.Add(0x91); //Logical segment
-            commonPacketFormat.Data.Add((byte)(tagPath.Length)); //number of chars in tag path
-            commonPacketFormat.Data.AddRange(Encoding.ASCII.GetBytes(tagPath)); //tag path string
-            if (padTagPath) commonPacketFormat.Data.Add(0x00); //add pad byte if odd number of bytes
+            commonPacketFormat.Data.AddRange(requestPathData); //Request Path
             commonPacketFormat.Data.AddRange(BitConverter.GetBytes(tagType)); //get the type of the tag
             commonPacketFormat.Data.AddRange(BitConverter.GetBytes((Int16)0x0001)); //Number of elements to write
             commonPacketFormat.Data.AddRange(tagData);

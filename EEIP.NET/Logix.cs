@@ -16,10 +16,42 @@ namespace Sres.Net.EEIP
             Write_Tag_Fragmented_Service = 0x53,
             Read_Modify_Write_Tag_Service = 0x4E
         }
+
+        public bool CheckForControllerChange()
+        {
+            var attributes = new List<UInt16>() { 1, 2, 3, 4, 10 };
+            return true;
+        }
     }
 
     public class LogixTag
     {
+        public string TagName = "";
+        
+        private UInt16 SymbolType = 0x00;
+        public UInt32 InstanceID { get => (UInt16) (SymbolType & 0x0FFF); }
+        public string DataKeyword
+        { 
+            get 
+            {
+                var success = TagTypes.TryGetValue((byte) (SymbolType & 0xF),out var returnValue);
+                if (success)
+                {
+                    return returnValue.Item1;
+                }
+                else
+                {
+                    return "UNKNOWN";
+                }
+            }
+        }
+        public bool IsReserved { get => ((SymbolType >> 12) & 0x1) != 0; }
+        public bool IsArray { get => ((SymbolType >> 13) & 0x3) != 0; }
+        public int ArrayNumDims { get => ((SymbolType >> 13) & 0x3); }
+        public bool IsAtomic { get => ((SymbolType >> 15) & 0x1) == 0; }
+        public bool IsStruct { get => ((SymbolType >> 15) & 0x1) != 0; }
+        private UInt16 StructureHandle = 0x00;
+
         /// <summary>
         /// Volume 1 Appendix C-2.1.1 Elementary Data Types
         /// </summary>
@@ -38,21 +70,21 @@ namespace Sres.Net.EEIP
             {0xCA,Tuple.Create("REAL",4)},
             {0xCB,Tuple.Create("LREAL",8)},
             {0xCC,Tuple.Create("STIME",0)},
-            {0xCD,Tuple.Create("DATE",0)},
-            {0xCE,Tuple.Create("TIME_OF_DAY",0)},
-            {0xCF,Tuple.Create("DATE_AND_TIME",0)},
+            {0xCD,Tuple.Create("DATE",2)},
+            {0xCE,Tuple.Create("TIME_OF_DAY",4)},
+            {0xCF,Tuple.Create("DATE_AND_TIME",6)},
             {0xD0,Tuple.Create("STRING",0)},
             {0xD1,Tuple.Create("BYTE",1)},
             {0xD2,Tuple.Create("WORD",2)},
             {0xD3,Tuple.Create("DWORD",4)},
             {0xD4,Tuple.Create("LWORD",8)},
             {0xD5,Tuple.Create("STRING2",0)},
-            {0xD6,Tuple.Create("FTIME",0)},
-            {0xD7,Tuple.Create("LTIME",0)},
+            {0xD6,Tuple.Create("FTIME",4)},
+            {0xD7,Tuple.Create("LTIME",8)},
             {0xD8,Tuple.Create("ITIME",0)},
             {0xD9,Tuple.Create("STRINGN",0)},
             {0xDA,Tuple.Create("SHORT_STRING",0)},
-            {0xDB,Tuple.Create("TIME",0)},
+            {0xDB,Tuple.Create("TIME",4)},
             {0xDC,Tuple.Create("EPATH",0)},
             {0xDD,Tuple.Create("ENGUNIT",0)}
         };
@@ -131,8 +163,5 @@ namespace Sres.Net.EEIP
 
             return requestPathData.ToArray();
         }
-
-        public string TagName = "";
-
     }
 }

@@ -36,7 +36,7 @@ namespace ConsoleApplication1
             //Console.WriteLine(BitConverter.ToInt32(response, 0).ToString());
 
             //read slightly more complicated tag (array access)
-            response = eeipClient.ReadTagSingle("opcArray[1]");
+            response = eeipClient.ReadTagSingle("opcArray[0]");
             Console.WriteLine();
             Console.WriteLine(BitConverter.ToString(response));
             Console.WriteLine("Read {0} bytes", response.Length);
@@ -86,7 +86,7 @@ namespace ConsoleApplication1
             //Just output for debug
             Console.WriteLine();
             Console.WriteLine("Heartbeat is {0}", visionData.heartbeat);
-            foreach (CameraData item in visionData.cameraData)
+            foreach (var item in visionData.cameraData)
             {
                 Console.WriteLine("Status is {0}, offset is {1}",item.status,item.offset);
             }
@@ -106,7 +106,7 @@ namespace ConsoleApplication1
             }
             
             Console.WriteLine("Elapsed time {0} ms",stopWatch.ElapsedMilliseconds);
-            
+
             eeipClient.UnRegisterSession();
             Console.ReadKey();
         }
