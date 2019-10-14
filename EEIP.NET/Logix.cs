@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace Sres.Net.EEIP
 {
-    public class Logix
+    public class Logix : EEIPClient
     {
         public enum Logix5000Services : byte
         {
@@ -17,16 +17,53 @@ namespace Sres.Net.EEIP
             Read_Modify_Write_Tag_Service = 0x4E
         }
 
+        /// <summary>
+        /// Volume 1 Appendix C-2.1.1 Elementary Data Types
+        /// </summary>
+        internal static Dictionary<byte, Tuple<string, int>> TagTypes = new Dictionary<byte, Tuple<string, int>>()
+        {
+            {0xA0,Tuple.Create("STRUCT",0)},
+            {0xC1,Tuple.Create("BOOL",1)},
+            {0xC2,Tuple.Create("SINT",1)},
+            {0xC3,Tuple.Create("INT",2)},
+            {0xC4,Tuple.Create("DINT",4)},
+            {0xC5,Tuple.Create("LINT",8)},
+            {0xC6,Tuple.Create("USINT",1)},
+            {0xC7,Tuple.Create("UINT",2)},
+            {0xC8,Tuple.Create("UDINT",4)},
+            {0xC9,Tuple.Create("ULINT",8)},
+            {0xCA,Tuple.Create("REAL",4)},
+            {0xCB,Tuple.Create("LREAL",8)},
+            {0xCC,Tuple.Create("STIME",0)},
+            {0xCD,Tuple.Create("DATE",2)},
+            {0xCE,Tuple.Create("TIME_OF_DAY",4)},
+            {0xCF,Tuple.Create("DATE_AND_TIME",6)},
+            {0xD0,Tuple.Create("STRING",0)},
+            {0xD1,Tuple.Create("BYTE",1)},
+            {0xD2,Tuple.Create("WORD",2)},
+            {0xD3,Tuple.Create("DWORD",4)},
+            {0xD4,Tuple.Create("LWORD",8)},
+            {0xD5,Tuple.Create("STRING2",0)},
+            {0xD6,Tuple.Create("FTIME",4)},
+            {0xD7,Tuple.Create("LTIME",8)},
+            {0xD8,Tuple.Create("ITIME",0)},
+            {0xD9,Tuple.Create("STRINGN",0)},
+            {0xDA,Tuple.Create("SHORT_STRING",0)},
+            {0xDB,Tuple.Create("TIME",4)},
+            {0xDC,Tuple.Create("EPATH",0)},
+            {0xDD,Tuple.Create("ENGUNIT",0)}
+        };
+
         public Dictionary<string, LogixTag> TagRegistry = new Dictionary<string, LogixTag>();
         private bool RefreshTagRegistry = true;
         private List<int> LastControllerState = new List<int>() { 1, 1, 1, 1, 1 };
         private List<int> ControllerState = new List<int>() { 0, 0, 0, 0, 0 };
 
-        public bool CheckForControllerChange(EEIPClient client)
+        public bool CheckForControllerChange()
         {
             var attributes = new List<UInt16>() { 1, 2, 3, 4, 10 };
             //TODO: read something
-            var reply = client.GetAttributeList(0xAC, 0x0001, attributes);
+            var reply = GetAttributeList(0xAC, 0x0001, attributes);
 
             var replyService = reply[0];
             var generalStatus = reply[2];
@@ -141,71 +178,6 @@ namespace Sres.Net.EEIP
 
             return this.RefreshTagRegistry;
         }
-    }
-
-    public class LogixTag
-    {
-        public string TagName = "";
-        private UInt16 SymbolType = 0x00;
-        public UInt32 InstanceID { get => (UInt16) (SymbolType & 0x0FFF); }
-        public string DataKeyword
-        { 
-            get 
-            {
-                var success = TagTypes.TryGetValue((byte) (SymbolType & 0xF),out var returnValue);
-                if (success)
-                {
-                    return returnValue.Item1;
-                }
-                else
-                {
-                    return "UNKNOWN";
-                }
-            }
-        }
-        public bool IsReserved { get => ((SymbolType >> 12) & 0x1) != 0; }
-        public bool IsArray { get => ((SymbolType >> 13) & 0x3) != 0; }
-        public int ArrayNumDims { get => ((SymbolType >> 13) & 0x3); }
-        public bool IsAtomic { get => ((SymbolType >> 15) & 0x1) == 0; }
-        public bool IsStruct { get => ((SymbolType >> 15) & 0x1) != 0; }
-        private UInt16 StructureHandle = 0x00;
-
-        /// <summary>
-        /// Volume 1 Appendix C-2.1.1 Elementary Data Types
-        /// </summary>
-        internal static Dictionary<byte, Tuple<string, int>> TagTypes = new Dictionary<byte, Tuple<string, int>>()
-        {
-            {0xA0,Tuple.Create("STRUCT",0)},
-            {0xC1,Tuple.Create("BOOL",1)},
-            {0xC2,Tuple.Create("SINT",1)},
-            {0xC3,Tuple.Create("INT",2)},
-            {0xC4,Tuple.Create("DINT",4)},
-            {0xC5,Tuple.Create("LINT",8)},
-            {0xC6,Tuple.Create("USINT",1)},
-            {0xC7,Tuple.Create("UINT",2)},
-            {0xC8,Tuple.Create("UDINT",4)},
-            {0xC9,Tuple.Create("ULINT",8)},
-            {0xCA,Tuple.Create("REAL",4)},
-            {0xCB,Tuple.Create("LREAL",8)},
-            {0xCC,Tuple.Create("STIME",0)},
-            {0xCD,Tuple.Create("DATE",2)},
-            {0xCE,Tuple.Create("TIME_OF_DAY",4)},
-            {0xCF,Tuple.Create("DATE_AND_TIME",6)},
-            {0xD0,Tuple.Create("STRING",0)},
-            {0xD1,Tuple.Create("BYTE",1)},
-            {0xD2,Tuple.Create("WORD",2)},
-            {0xD3,Tuple.Create("DWORD",4)},
-            {0xD4,Tuple.Create("LWORD",8)},
-            {0xD5,Tuple.Create("STRING2",0)},
-            {0xD6,Tuple.Create("FTIME",4)},
-            {0xD7,Tuple.Create("LTIME",8)},
-            {0xD8,Tuple.Create("ITIME",0)},
-            {0xD9,Tuple.Create("STRINGN",0)},
-            {0xDA,Tuple.Create("SHORT_STRING",0)},
-            {0xDB,Tuple.Create("TIME",4)},
-            {0xDC,Tuple.Create("EPATH",0)},
-            {0xDD,Tuple.Create("ENGUNIT",0)}
-        };
 
         /// <summary>
         /// Builds request path for tag access (r/w)
@@ -281,5 +253,80 @@ namespace Sres.Net.EEIP
 
             return requestPathData.ToArray();
         }
+
+        public byte[] ReadTagSingle(string tagPath)
+        {
+            Encapsulation.CommonPacketFormat commonPacketFormat = new Encapsulation.CommonPacketFormat();
+
+            var requestPathData = GetRequestPath(tagPath);
+
+            //Common Packet Format Data
+            commonPacketFormat.Data.Add((byte)Logix.Logix5000Services.Read_Tag_Service); //requested service
+            commonPacketFormat.Data.Add((byte)(requestPathData.Length / 2)); //Requested Path size (number of 16 bit words)
+            //Request Path
+            commonPacketFormat.Data.AddRange(requestPathData); //Request Path
+            commonPacketFormat.Data.AddRange(BitConverter.GetBytes((Int16)0x0001)); //Number of elements to read
+
+            var encapsulation = BuildUCMMHeader(Encapsulation.CommandsEnum.SendRRData, commonPacketFormat);
+            var recvData = GetUCMMreply(encapsulation, commonPacketFormat);
+
+            var tagTypeServiceParam = (UInt16)(recvData[45] << 8 | recvData[44]);
+            var isUDT = (tagTypeServiceParam == 0x02A0);
+            var replyDataOffset = isUDT ? 48 : 46;
+
+            byte[] returnData = new byte[recvData.Length - replyDataOffset];
+            System.Buffer.BlockCopy(recvData, replyDataOffset, returnData, 0, recvData.Length - replyDataOffset);
+
+            return returnData;
+        }
+
+        public bool WriteTagSingle(string tagPath, UInt16 tagType, byte[] tagData)
+        {
+            Encapsulation.CommonPacketFormat commonPacketFormat = new Encapsulation.CommonPacketFormat();
+
+            var requestPathData = GetRequestPath(tagPath);
+
+            //Common Packet Format Data
+            commonPacketFormat.Data.Add((byte)Logix.Logix5000Services.Write_Tag_Service); //requested service
+            commonPacketFormat.Data.Add((byte)(requestPathData.Length / 2)); //Requested Path size (number of 16 bit words)
+            //Request Path
+            commonPacketFormat.Data.AddRange(requestPathData); //Request Path
+            commonPacketFormat.Data.AddRange(BitConverter.GetBytes(tagType)); //get the type of the tag
+            commonPacketFormat.Data.AddRange(BitConverter.GetBytes((Int16)0x0001)); //Number of elements to write
+            commonPacketFormat.Data.AddRange(tagData);
+
+            var encapsulation = BuildUCMMHeader(Encapsulation.CommandsEnum.SendRRData, commonPacketFormat);
+            var recvData = GetUCMMreply(encapsulation, commonPacketFormat);
+
+            return true;
+        }
+    }
+
+    public class LogixTag
+    {
+        public string TagName = "";
+        private UInt16 SymbolType = 0x00;
+        public UInt32 InstanceID { get => (UInt16) (SymbolType & 0x0FFF); }
+        public string DataKeyword
+        { 
+            get 
+            {
+                var success = Logix.TagTypes.TryGetValue((byte) (SymbolType & 0xF),out var returnValue);
+                if (success)
+                {
+                    return returnValue.Item1;
+                }
+                else
+                {
+                    return "UNKNOWN";
+                }
+            }
+        }
+        public bool IsReserved { get => ((SymbolType >> 12) & 0x1) != 0; }
+        public bool IsArray { get => ((SymbolType >> 13) & 0x3) != 0; }
+        public int ArrayNumDims { get => ((SymbolType >> 13) & 0x3); }
+        public bool IsAtomic { get => ((SymbolType >> 15) & 0x1) == 0; }
+        public bool IsStruct { get => ((SymbolType >> 15) & 0x1) != 0; }
+        private UInt16 StructureHandle = 0x00;
     }
 }

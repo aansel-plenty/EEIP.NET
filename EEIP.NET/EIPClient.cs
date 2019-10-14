@@ -13,7 +13,7 @@ namespace Sres.Net.EEIP
     {
         TcpClient client;
         NetworkStream stream;
-        UInt32 sessionHandle;
+        protected UInt32 sessionHandle;
         UInt32 connectionID_O_T;
         UInt32 connectionID_T_O;
         UInt32 multicastAddress;
@@ -1241,9 +1241,11 @@ namespace Sres.Net.EEIP
 
             return header;
         }
-
-        private byte[] GetUCMMreply(Encapsulation encapsulation,Encapsulation.CommonPacketFormat commonPacketFormat)
+        protected byte[] GetUCMMreply(Encapsulation encapsulation,Encapsulation.CommonPacketFormat commonPacketFormat)
         {
+            if (this.sessionHandle == 0) //If a Session is not registered, Try to Register a Session with the predefined IP-Address and Port
+                this.RegisterSession();
+
             byte[] dataToWrite = new byte[encapsulation.ToBytes().Length + commonPacketFormat.ToBytes().Length];
             System.Buffer.BlockCopy(encapsulation.ToBytes(), 0, dataToWrite, 0, encapsulation.ToBytes().Length);
             System.Buffer.BlockCopy(commonPacketFormat.ToBytes(), 0, dataToWrite, encapsulation.ToBytes().Length, commonPacketFormat.ToBytes().Length);
@@ -1261,59 +1263,6 @@ namespace Sres.Net.EEIP
             }
 
             return recvBuffer.Take(recvLength).ToArray();
-        }
-
-        public byte[] ReadTagSingle(string tagPath)
-        {
-            if (sessionHandle == 0) //If a Session is not registered, Try to Register a Session with the predefined IP-Address and Port
-                this.RegisterSession();
-
-            Encapsulation.CommonPacketFormat commonPacketFormat = new Encapsulation.CommonPacketFormat();
-
-            var requestPathData = LogixTag.GetRequestPath(tagPath);
-
-            //Common Packet Format Data
-            commonPacketFormat.Data.Add((byte)Logix.Logix5000Services.Read_Tag_Service); //requested service
-            commonPacketFormat.Data.Add((byte)(requestPathData.Length/2)); //Requested Path size (number of 16 bit words)
-            //Request Path
-            commonPacketFormat.Data.AddRange(requestPathData); //Request Path
-            commonPacketFormat.Data.AddRange(BitConverter.GetBytes((Int16)0x0001)); //Number of elements to read
-
-            var encapsulation = BuildUCMMHeader(Encapsulation.CommandsEnum.SendRRData, commonPacketFormat);
-            var recvData = GetUCMMreply(encapsulation, commonPacketFormat);
-
-            var tagTypeServiceParam = (UInt16) (recvData[45] << 8 | recvData[44]);
-            var isUDT = (tagTypeServiceParam == 0x02A0);
-            var replyDataOffset = isUDT ? 48 : 46;
- 
-            byte[] returnData = new byte[recvData.Length - replyDataOffset];
-            System.Buffer.BlockCopy(recvData, replyDataOffset, returnData, 0, recvData.Length - replyDataOffset);
-
-            return returnData;
-        }
-
-        public bool WriteTagSingle(string tagPath, UInt16 tagType, byte[] tagData)
-        {
-            if (sessionHandle == 0) //If a Session is not registered, Try to Register a Session with the predefined IP-Address and Port
-                this.RegisterSession();
-
-            Encapsulation.CommonPacketFormat commonPacketFormat = new Encapsulation.CommonPacketFormat();
-            
-            var requestPathData = LogixTag.GetRequestPath(tagPath);
-
-            //Common Packet Format Data
-            commonPacketFormat.Data.Add((byte)Logix.Logix5000Services.Write_Tag_Service); //requested service
-            commonPacketFormat.Data.Add((byte)(requestPathData.Length/2)); //Requested Path size (number of 16 bit words)
-            //Request Path
-            commonPacketFormat.Data.AddRange(requestPathData); //Request Path
-            commonPacketFormat.Data.AddRange(BitConverter.GetBytes(tagType)); //get the type of the tag
-            commonPacketFormat.Data.AddRange(BitConverter.GetBytes((Int16)0x0001)); //Number of elements to write
-            commonPacketFormat.Data.AddRange(tagData);
-
-            var encapsulation = BuildUCMMHeader(Encapsulation.CommandsEnum.SendRRData, commonPacketFormat);
-            var recvData = GetUCMMreply(encapsulation,commonPacketFormat);
-            
-            return true;
         }
 
         ObjectLibrary.IdentityObject identityObject;

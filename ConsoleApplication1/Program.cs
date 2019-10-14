@@ -13,48 +13,47 @@ namespace ConsoleApplication1
     {
         static void Main(string[] args)
         {
-            var eeipClient = new EEIPClient();
             var plc = new Logix();
 
-            eeipClient.IPAddress = "10.100.21.30";
-            eeipClient.RegisterSession();
+            plc.IPAddress = "10.100.21.30";
+            plc.RegisterSession();
 
-            byte[] response = eeipClient.GetAttributeSingle(0x01, 1, 1);
+            byte[] response = plc.GetAttributeSingle(0x01, 1, 1);
             var resp_identity = (response[1] << 8 | response[0]).ToString();
             Console.WriteLine("Revision of identity object is " + resp_identity);
 
-            var refresh = plc.CheckForControllerChange(eeipClient);
+            var refresh = plc.CheckForControllerChange();
 
             //read simple tag
-            response = eeipClient.ReadTagSingle("testEIPRead");
+            response = plc.ReadTagSingle("testEIPRead");
             Console.WriteLine();
             Console.WriteLine(BitConverter.ToString(response));
             Console.WriteLine("Read {0} bytes", response.Length);
             Console.WriteLine(BitConverter.ToInt32(response,0).ToString());
 
             //read slightly more complicated tag (bit access)
-            //response = eeipClient.ReadTagSingle("testEIPRead.1");
+            //response = plc.client.ReadTagSingle("testEIPRead.1");
             //Console.WriteLine();
             //Console.WriteLine(BitConverter.ToString(response));
             //Console.WriteLine("Read {0} bytes", response.Length);
             //Console.WriteLine(BitConverter.ToInt32(response, 0).ToString());
 
             //read slightly more complicated tag (array access)
-            response = eeipClient.ReadTagSingle("opcArray[0]");
+            response = plc.ReadTagSingle("opcArray[0]");
             Console.WriteLine();
             Console.WriteLine(BitConverter.ToString(response));
             Console.WriteLine("Read {0} bytes", response.Length);
             Console.WriteLine(BitConverter.ToInt32(response, 0).ToString());
 
             //read slightly more complicated tag (udt)
-            response = eeipClient.ReadTagSingle("fromVision.heartbeat");
+            response = plc.ReadTagSingle("fromVision.heartbeat");
             Console.WriteLine();
             Console.WriteLine(BitConverter.ToString(response));
             Console.WriteLine("Read {0} bytes", response.Length);
             Console.WriteLine(BitConverter.ToInt32(response, 0).ToString());
 
             //read simple tag
-            response = eeipClient.ReadTagSingle("testEIPWrite");
+            response = plc.ReadTagSingle("testEIPWrite");
             Console.WriteLine();
             Console.WriteLine(BitConverter.ToString(response));
             Console.WriteLine("Read {0} bytes", response.Length);
@@ -62,16 +61,16 @@ namespace ConsoleApplication1
             Console.WriteLine(testEIPwrite);
 
             //now write to the tag
-            var success = eeipClient.WriteTagSingle("testEIPWrite", 0x00C4, BitConverter.GetBytes(testEIPwrite + 1));
+            var success = plc.WriteTagSingle("testEIPWrite", 0x00C4, BitConverter.GetBytes(testEIPwrite + 1));
 
             //read simple udt
-            response = eeipClient.ReadTagSingle("toVision");
+            response = plc.ReadTagSingle("toVision");
             Console.WriteLine();
             Console.WriteLine(BitConverter.ToString(response));
             Console.WriteLine("Read {0} bytes", response.Length);
 
             //read simple udt to be able to write to it
-            response = eeipClient.ReadTagSingle("fromVision");
+            response = plc.ReadTagSingle("fromVision");
             Console.WriteLine();
             Console.WriteLine(BitConverter.ToString(response));
             Console.WriteLine("Read {0} bytes", response.Length);
@@ -101,17 +100,17 @@ namespace ConsoleApplication1
             //Test read and write latency
             for (int i = 0; i < 100; i++)
             {
-                response = eeipClient.ReadTagSingle("testEIPWrite");
+                response = plc.ReadTagSingle("testEIPWrite");
                 var readVal = BitConverter.ToInt32(response, 0);
                 var writeVal = readVal + 1;
-                eeipClient.WriteTagSingle("testEIPWrite", 0x00C4, BitConverter.GetBytes(writeVal));
+                plc.WriteTagSingle("testEIPWrite", 0x00C4, BitConverter.GetBytes(writeVal));
                 //Console.WriteLine("Read {0}, Wrote {1}",readVal,writeVal);
                 //Console.WriteLine("Elapsed time {0} ms", stopWatch.ElapsedMilliseconds);
             }
             
             Console.WriteLine("Elapsed time {0} ms",stopWatch.ElapsedMilliseconds);
 
-            eeipClient.UnRegisterSession();
+            plc.UnRegisterSession();
             Console.ReadKey();
         }
     }
