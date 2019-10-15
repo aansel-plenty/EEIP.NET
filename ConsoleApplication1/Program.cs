@@ -20,9 +20,8 @@ namespace ConsoleApplication1
 
             //Testing Forward open
             plc.TransportType = 0x83;
-            //plc.ForwardOpen();
-
-            //plc.ForwardClose();
+            plc.ForwardOpen();
+            plc.ForwardClose();
 
             byte[] response = plc.GetAttributeSingle(0x01, 1, 1);
             var resp_identity = (response[1] << 8 | response[0]).ToString();
@@ -165,7 +164,7 @@ namespace ConsoleApplication1
                         if (resp[offsetIndex+4] == 0xC4)
                         {
                             var readval = BitConverter.ToInt32(resp.ToArray(), offsetIndex + 6);
-                            Console.WriteLine(readval);
+                            //Console.WriteLine(readval);
                         }
                     }  
                 }

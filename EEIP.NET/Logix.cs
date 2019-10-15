@@ -53,11 +53,21 @@ namespace Sres.Net.EEIP
             {0xDC,Tuple.Create("EPATH",0)},
             {0xDD,Tuple.Create("ENGUNIT",0)}
         };
+        public static Dictionary<string, Tuple<byte, int>> TagStringTypes = new Dictionary<string, Tuple<byte, int>>();
 
         public Dictionary<string, LogixTag> TagRegistry = new Dictionary<string, LogixTag>();
         private bool RefreshTagRegistry = true;
         private List<int> LastControllerState = new List<int>() { 1, 1, 1, 1, 1 };
         private List<int> ControllerState = new List<int>() { 0, 0, 0, 0, 0 };
+
+        public Logix()
+        {
+            //build reverse lookup for convenience
+            foreach (var keyValuePair in TagTypes)
+            {
+                TagStringTypes[keyValuePair.Value.Item1] = Tuple.Create(keyValuePair.Key, keyValuePair.Value.Item2);
+            }
+        }
 
         public bool CheckForControllerChange()
         {
