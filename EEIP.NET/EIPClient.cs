@@ -251,6 +251,12 @@ namespace Sres.Net.EEIP
         /// </summary> 
         public void UnRegisterSession()
         {
+            //Check if we have an open session
+            if (this.connectionSerialNumber != 0)
+            {
+                ForwardClose();
+            }
+
             Encapsulation encapsulation = new Encapsulation();
             encapsulation.Command = Encapsulation.CommandsEnum.UnRegisterSession;
             encapsulation.Length = 0;
@@ -310,9 +316,9 @@ namespace Sres.Net.EEIP
             commonPacketFormat.Data.Add(0x03); //Priority and Time/Tick - Table 3-5.16 (Vol. 1) 8 ms base clock
             commonPacketFormat.Data.Add(0xfa); //Timeout Ticks - Table 3-5.16 (Vol. 1) 250x timeout so 2 seconds
 
-            this.connectionID_O_T = Convert.ToUInt32(new Random().Next(0xFFFFFFF));
-            this.connectionID_T_O = Convert.ToUInt32(new Random().Next(0xFFFFFFF) +1);
-            this.connectionSerialNumber = Convert.ToUInt16(new Random().Next(0xFFFF) + 2);
+            this.connectionID_O_T = Convert.ToUInt32(new Random().Next(0x1,0xFFFFFFF));
+            this.connectionID_T_O = Convert.ToUInt32(new Random().Next(0x1,0xFFFFFFF));
+            this.connectionSerialNumber = Convert.ToUInt16(new Random().Next(0x1,0xFFFF));
             commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt32) connectionID_O_T));
             commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt32) connectionID_T_O));
             commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt16) connectionSerialNumber)); //Connection serial number (random)
@@ -545,7 +551,7 @@ namespace Sres.Net.EEIP
                     commonPacketFormat.Data.Add(T_O_InstanceID);
                 }
             }
-            else
+            else //Transport Class 2 or 3 uses just TCP
             {
                 commonPacketFormat.Data.Add(0x03); //connection path size is 3 words (16-bit)
                 commonPacketFormat.Data.Add(0); //Reserved
@@ -555,6 +561,7 @@ namespace Sres.Net.EEIP
             var encapsulation = BuildUCMMHeader(Encapsulation.CommandsEnum.SendRRData, commonPacketFormat);
             var recvData = GetUCMMreply(encapsulation, commonPacketFormat);
 
+            this.connectionSerialNumber = 0; //clear out serial number
             //Todo clean up access to Transport class there should be a property for the trigger type and it should get used in Forward Open
             if (this.TransportClass == 0 || this.TransportClass == 1) //Transport Class 0 or 1 uses UDP
             {

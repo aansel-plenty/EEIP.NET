@@ -392,6 +392,7 @@ namespace Sres.Net.EEIP
 
         public List<byte> rawData = new List<byte>();
         private object LastValue;
+        private object PreviousValue;
         public object Value;
 
         public void UpdateValue()
@@ -428,6 +429,7 @@ namespace Sres.Net.EEIP
             if (!Value.Equals(LastValue))
             {
                 //value has changed
+                PreviousValue = LastValue;
                 LastValue = Value;
             }
         }

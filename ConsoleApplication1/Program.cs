@@ -15,13 +15,16 @@ namespace ConsoleApplication1
         {
             var plc = new Logix();
 
-            plc.IPAddress = "10.100.21.30";
+            plc.IPAddress = "10.100.21.20"; //Test PLC
+            //plc.IPAddress = "10.100.21.30"; //Workbench PLC
+            //plc.IPAddress = "10.100.25.101"; //Tigris Washer???
             plc.RegisterSession();
 
             //Testing Forward open
             plc.TransportType = 0x83;
-            plc.ForwardOpen();
-            plc.ForwardClose();
+            //plc.ForwardOpen();
+            //System.Threading.Thread.Sleep(10000);
+            //plc.ForwardClose();
 
             byte[] response = plc.GetAttributeSingle(0x01, 1, 1);
             var resp_identity = (response[1] << 8 | response[0]).ToString();
@@ -49,7 +52,7 @@ namespace ConsoleApplication1
             Console.WriteLine(BitConverter.ToString(response));
             Console.WriteLine("Read {0} bytes", response.Length);
             Console.WriteLine(BitConverter.ToInt32(response, 0).ToString());
-
+            
             //read slightly more complicated tag (udt)
             response = plc.ReadTagSingle("fromVision.heartbeat");
             Console.WriteLine();
@@ -74,19 +77,19 @@ namespace ConsoleApplication1
             Console.WriteLine();
             Console.WriteLine(BitConverter.ToString(response));
             Console.WriteLine("Read {0} bytes", response.Length);
-
+            
             //read simple udt
             response = plc.ReadTagSingle("fromVision.towerCamera[0].offset1");
             Console.WriteLine();
             Console.WriteLine(BitConverter.ToString(response));
             Console.WriteLine("Read {0} bytes", response.Length);
-
+            
             //read simple udt to be able to write to it
             response = plc.ReadTagSingle("fromVision");
             Console.WriteLine();
             Console.WriteLine(BitConverter.ToString(response));
             Console.WriteLine("Read {0} bytes", response.Length);
-
+            
             VisionRecvData visionData = new VisionRecvData();
             visionData.heartbeat = BitConverter.ToInt32(response,0);
             
@@ -97,7 +100,7 @@ namespace ConsoleApplication1
                 c1.offset = BitConverter.ToSingle(response, 8 + 8 * i);
                 visionData.cameraData.Add(c1);
             }
-
+            
             //Just output for debug
             Console.WriteLine();
             Console.WriteLine("Heartbeat is {0}", visionData.heartbeat);
@@ -108,7 +111,7 @@ namespace ConsoleApplication1
 
             Stopwatch stopWatch = new Stopwatch();
             stopWatch.Start();
-            
+
             //Test read and write latency
             //for (int i = 0; i <= 100; i++)
             //{
@@ -122,11 +125,12 @@ namespace ConsoleApplication1
             //}
             //
             //Console.WriteLine("Elapsed time {0} ms", stopWatch.ElapsedMilliseconds);
-            
-            var readTags = new List<string>() { "testEIPWrite","fromVision"};
+
+            //var readTags = new List<string>() { "testEIPWrite","fromVision"};
+            var readTags = new List<string>() { "testEIPWrite"};
             var writeTags = new List<Tuple<string, UInt16, byte[]>>();
             writeTags.Add(Tuple.Create("testEIPwrite", (UInt16)0x00C4, BitConverter.GetBytes(testval)));
-            writeTags.Add(Tuple.Create("fromVision.towerCamera[0].offset1", (UInt16)0xCA, BitConverter.GetBytes(1234.5678f)));
+            //writeTags.Add(Tuple.Create("fromVision.towerCamera[0].offset1", (UInt16)0xCA, BitConverter.GetBytes(1234.5678f)));
             var resp = plc.MultiReadWrite(readTags, writeTags);
             Console.WriteLine();
             Console.WriteLine("Multi read/write succeeded!");
@@ -152,7 +156,7 @@ namespace ConsoleApplication1
             for (int i = 0; i <= 100; i++)
             {
                 //Console.WriteLine("Elapsed time {0} ms", stopWatch.ElapsedMilliseconds);
-                writeTags[0] = (Tuple.Create("testEIPwrite",(UInt16) 0x00C4, BitConverter.GetBytes(testval++)));
+                writeTags[0] = (Tuple.Create("testEIPWrite",(UInt16) 0x00C4, BitConverter.GetBytes(testval++)));
                 resp = plc.MultiReadWrite(readTags, writeTags);
                 numTags = resp[1] << 8 | resp[0];
                 for (int j = 0; j < numTags; j++)
