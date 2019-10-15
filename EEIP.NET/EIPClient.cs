@@ -18,6 +18,12 @@ namespace Sres.Net.EEIP
         UInt32 connectionID_T_O;
         UInt32 multicastAddress;
         UInt16 connectionSerialNumber;
+        public ushort VendorID = 0x00FF; //Pretend to be Bosch Rexroth I guess
+        public uint SerialNumber = 0xFFFF;
+        public byte TransportType = 0x01;
+        public int TransportClass { get => (TransportType & 0x3); }
+        public int ProcessorSlot = 0;
+        public uint ConnectionSize = 504;
         /// <summary>
         /// TCP-Port of the Server - Standard is 0xAF12 44818
         /// </summary>
@@ -268,178 +274,166 @@ namespace Sres.Net.EEIP
             if (T_O_RealTimeFormat == RealTimeFormat.Heartbeat)
                 t_o_headerOffset = 0;
 
-            var largeForwardOpen = ((T_O_Length + t_o_headerOffset) > 504); //larger than standard packet
+            bool largeForwardOpen;
+            if (this.TransportClass == 0 || this.TransportClass == 1) //Transport Class 0 or 1 uses UDP
+            {
+                largeForwardOpen = ((T_O_Length + t_o_headerOffset) > 504); //larger than standard packet
+            }
+            else
+            {
+                largeForwardOpen = (this.ConnectionSize > 504); //larger than standard packet
+            }
+
             int lengthOffset = (5 + (O_T_ConnectionType == ConnectionType.Null ? 0 : 2) + (T_O_ConnectionType == ConnectionType.Null ? 0 : 2));
 
             //Common Packet Format (Table 2-6.1)
             Encapsulation.CommonPacketFormat commonPacketFormat = new Encapsulation.CommonPacketFormat();
             commonPacketFormat.ItemCount = 0x02;
-
             commonPacketFormat.AddressItem = 0x0000;        //NULL (used for UCMM Messages)
             commonPacketFormat.AddressLength = 0x0000;
-
-            
             commonPacketFormat.DataItem = 0xB2;
-            commonPacketFormat.DataLength = (ushort)(41 + (ushort)lengthOffset);
-            if (largeForwardOpen)
-                commonPacketFormat.DataLength = (ushort)(commonPacketFormat.DataLength + 4);
-
-
+            commonPacketFormat.DataLength = (ushort)(41 + lengthOffset + (largeForwardOpen ? 4 : 0));
 
             commonPacketFormat.Data.Add((byte) (largeForwardOpen ? CIPConnectionServices.Large_Forward_Open : CIPConnectionServices.Forward_Open)); //commanded service
-            commonPacketFormat.Data.Add(2); //Requested Path size
-            //----------------Path segment for Class ID
-            commonPacketFormat.Data.Add(0x20);
-            commonPacketFormat.Data.Add((byte)6);
-            //----------------Path segment for Class ID
-            //----------------Path segment for Instance ID
-            commonPacketFormat.Data.Add(0x24);
-            commonPacketFormat.Data.Add((byte)1);
-            //----------------Path segment for Instance ID
-            //----------------Priority and Time/Tick - Table 3-5.16 (Vol. 1)
-            commonPacketFormat.Data.Add(0x03);
-            //----------------Priority and Time/Tick
+            commonPacketFormat.Data.Add(0x02); //Requested Path size
+            commonPacketFormat.Data.Add(0x20); //Path segment for Class ID
+            commonPacketFormat.Data.Add(0x06); //Class ID
+            commonPacketFormat.Data.Add(0x24); //Path segment for Instance ID
+            commonPacketFormat.Data.Add(0x01); //Instance ID
 
-            //----------------Timeout Ticks - Table 3-5.16 (Vol. 1)
-            commonPacketFormat.Data.Add(0xfa);
-            //----------------Timeout Ticks
+            commonPacketFormat.Data.Add(0x03); //Priority and Time/Tick - Table 3-5.16 (Vol. 1) 8 ms base clock
+            commonPacketFormat.Data.Add(0xfa); //Timeout Ticks - Table 3-5.16 (Vol. 1) 250x timeout so 2 seconds
 
-            this.connectionID_O_T = Convert.ToUInt32(new Random().Next(0xfffffff));
-            this.connectionID_T_O = Convert.ToUInt32(new Random().Next(0xfffffff)+1);
-            commonPacketFormat.Data.Add((byte)connectionID_O_T);
-            commonPacketFormat.Data.Add((byte)(connectionID_O_T >> 8));
-            commonPacketFormat.Data.Add((byte)(connectionID_O_T >> 16));
-            commonPacketFormat.Data.Add((byte)(connectionID_O_T >> 24));
-
-
-            commonPacketFormat.Data.Add((byte)connectionID_T_O);
-            commonPacketFormat.Data.Add((byte)(connectionID_T_O >> 8));
-            commonPacketFormat.Data.Add((byte)(connectionID_T_O >> 16));
-            commonPacketFormat.Data.Add((byte)(connectionID_T_O >> 24));
-
-            this.connectionSerialNumber = Convert.ToUInt16(new Random().Next(0xFFFF)+2);
-            commonPacketFormat.Data.Add((byte)connectionSerialNumber);
-            commonPacketFormat.Data.Add((byte)(connectionSerialNumber >> 8));
-
-            //----------------Originator Vendor ID
-            commonPacketFormat.Data.Add(0xFF);
-            commonPacketFormat.Data.Add(0);
-            //----------------Originaator Vendor ID
-
-            //----------------Originator Serial Number
-            commonPacketFormat.Data.Add(0xFF);
-            commonPacketFormat.Data.Add(0xFF);
-            commonPacketFormat.Data.Add(0xFF);
-            commonPacketFormat.Data.Add(0xFF);
-            //----------------Originator Serial Number
-
-            //----------------Timeout Multiplier
-            commonPacketFormat.Data.Add(3);
-            //----------------Timeout Multiplier
-
-            //----------------Reserved
-            commonPacketFormat.Data.Add(0);
-            commonPacketFormat.Data.Add(0);
-            commonPacketFormat.Data.Add(0);
-            //----------------Reserved
-
-            //----------------Requested Packet Rate O->T in Microseconds
-            commonPacketFormat.Data.Add((byte)RequestedPacketRate_O_T);
-            commonPacketFormat.Data.Add((byte)(RequestedPacketRate_O_T >> 8));
-            commonPacketFormat.Data.Add((byte)(RequestedPacketRate_O_T >> 16));
-            commonPacketFormat.Data.Add((byte)(RequestedPacketRate_O_T >> 24));
-            //----------------Requested Packet Rate O->T in Microseconds
+            this.connectionID_O_T = Convert.ToUInt32(new Random().Next(0xFFFFFFF));
+            this.connectionID_T_O = Convert.ToUInt32(new Random().Next(0xFFFFFFF) +1);
+            this.connectionSerialNumber = Convert.ToUInt16(new Random().Next(0xFFFF) + 2);
+            commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt32) connectionID_O_T));
+            commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt32) connectionID_T_O));
+            commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt16) connectionSerialNumber));
+            commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt16) this.VendorID)); //Originator Vendor ID
+            commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt32) this.SerialNumber)); //Originator Serial Number
+            commonPacketFormat.Data.Add(0x03); //Timeout Multiplier
+            commonPacketFormat.Data.AddRange(new byte[3]); //Reserved octets
+            commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt32)this.RequestedPacketRate_O_T)); //Requested Packet Rate O->T in Microseconds
 
             //----------------O->T Network Connection Parameters
             bool redundantOwner = (bool)O_T_OwnerRedundant;
             byte connectionType = (byte)O_T_ConnectionType; //1=Multicast, 2=P2P
-            byte priority = (byte)O_T_Priority;         //00=low; 01=High; 10=Scheduled; 11=Urgent
-            bool variableLength = O_T_VariableLength;       //0=fixed; 1=variable
-            UInt16 connectionSize = (ushort)(O_T_Length + o_t_headerOffset);      //The maximum size in bytes og the data for each direction (were applicable) of the connection. For a variable -> maximum
-            UInt32 NetworkConnectionParameters = (UInt16)((UInt16)(connectionSize & 0x1FF) | ((Convert.ToUInt16(variableLength)) << 9) | ((priority & 0x03) << 10) | ((connectionType & 0x03) << 13) | ((Convert.ToUInt16(redundantOwner)) << 15));
-            if (largeForwardOpen)
-                NetworkConnectionParameters = (UInt32)((uint)(connectionSize & 0xFFFF) | ((Convert.ToUInt32(variableLength)) << 25) | (uint)((priority & 0x03) << 26) | (uint)((connectionType & 0x03) << 29) | ((Convert.ToUInt32(redundantOwner)) << 31));
-            commonPacketFormat.Data.Add((byte)NetworkConnectionParameters);
-            commonPacketFormat.Data.Add((byte)(NetworkConnectionParameters >> 8));
+            byte priority = (byte)O_T_Priority; //00=low; 01=High; 10=Scheduled; 11=Urgent
+            bool variableLength = O_T_VariableLength; //0=fixed; 1=variable
+            uint connectionSize = (uint) (T_O_Length + t_o_headerOffset);
+            UInt32 networkConnectionParameters;
+            if (this.TransportClass == 0 || this.TransportClass == 1) //Transport Class 0 or 1 uses UDP
+            {
+                connectionSize = (ushort)(O_T_Length + o_t_headerOffset); //The maximum size in bytes of the data for each direction (where applicable) of the connection. For a variable -> maximum
+                networkConnectionParameters = (UInt16) (((Convert.ToUInt16(redundantOwner)) << 15) | ((connectionType & 0x03) << 13) | ((priority & 0x03) << 10) | ((Convert.ToUInt16(variableLength)) << 9));
+            }
+            else
+            {
+                connectionSize = this.ConnectionSize;
+                networkConnectionParameters = 0x4200;
+                networkConnectionParameters = (UInt16)(((Convert.ToUInt16(false)) << 15) | ((connectionType & 0x03) << 13) | ((priority & 0x03) << 10) | ((Convert.ToUInt16(variableLength)) << 9));
+            }
+                
             if (largeForwardOpen)
             {
-                commonPacketFormat.Data.Add((byte)(NetworkConnectionParameters >> 16));
-                commonPacketFormat.Data.Add((byte)(NetworkConnectionParameters >> 24));
+                networkConnectionParameters <<= 16;
+                networkConnectionParameters |= ((UInt16) (connectionSize & 0xFFFF));
+                commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt32)networkConnectionParameters));
+            }
+            else
+            {
+                //networkConnectionParameters = 0x4200; //TODO: remove
+                networkConnectionParameters |= (UInt16) (connectionSize & 0x1FF);
+                commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt16)networkConnectionParameters));
             }
             //----------------O->T Network Connection Parameters
 
-            //----------------Requested Packet Rate T->O in Microseconds
-            commonPacketFormat.Data.Add((byte)RequestedPacketRate_T_O);
-            commonPacketFormat.Data.Add((byte)(RequestedPacketRate_T_O >> 8));
-            commonPacketFormat.Data.Add((byte)(RequestedPacketRate_T_O >> 16));
-            commonPacketFormat.Data.Add((byte)(RequestedPacketRate_T_O >> 24));
-            //----------------Requested Packet Rate T->O in Microseconds
-
+            commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt32) this.RequestedPacketRate_T_O)); //Requested Packet Rate T->O in Microseconds
             //----------------T->O Network Connection Parameters
-
-
             redundantOwner = (bool)T_O_OwnerRedundant;
             connectionType = (byte)T_O_ConnectionType; //1=Multicast, 2=P2P
             priority = (byte)T_O_Priority;
             variableLength = T_O_VariableLength;
-            connectionSize = (byte)(T_O_Length  + t_o_headerOffset);
-            NetworkConnectionParameters = (UInt16)((UInt16)(connectionSize & 0x1FF) | ((Convert.ToUInt16(variableLength)) << 9) | ((priority & 0x03) << 10) | ((connectionType & 0x03) << 13) | ((Convert.ToUInt16(redundantOwner)) << 15));
-            if (largeForwardOpen)
-                NetworkConnectionParameters = (UInt32)((uint)(connectionSize & 0xFFFF) | ((Convert.ToUInt32(variableLength)) << 25) | (uint)((priority & 0x03) << 26) | (uint)((connectionType & 0x03) << 29) | ((Convert.ToUInt32(redundantOwner)) << 31));
-            commonPacketFormat.Data.Add((byte)NetworkConnectionParameters);
-            commonPacketFormat.Data.Add((byte)(NetworkConnectionParameters >> 8));
+            connectionSize = (uint) (T_O_Length + t_o_headerOffset);
+            if (this.TransportClass == 0 || this.TransportClass == 1) //Transport Class 0 or 1 uses UDP
+            {
+                networkConnectionParameters = 0;
+                connectionSize = (ushort)(O_T_Length + o_t_headerOffset); //The maximum size in bytes of the data for each direction (where applicable) of the connection. For a variable -> maximum
+                networkConnectionParameters = (UInt16)(((Convert.ToUInt16(redundantOwner)) << 15) | ((connectionType & 0x03) << 13) | ((priority & 0x03) << 10) | ((Convert.ToUInt16(variableLength)) << 9));
+            }
+            //Reuse connection parameters for Class 2 or 3
+
             if (largeForwardOpen)
             {
-                commonPacketFormat.Data.Add((byte)(NetworkConnectionParameters >> 16));
-                commonPacketFormat.Data.Add((byte)(NetworkConnectionParameters >> 24));
+                networkConnectionParameters <<= 16;
+                networkConnectionParameters |= ((UInt16) (connectionSize & 0xFFFF));
+                commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt32)networkConnectionParameters));
+            }
+            else
+            {
+                networkConnectionParameters |= (UInt16) (connectionSize & 0x1FF);
+                commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt16)networkConnectionParameters));
             }
             //----------------T->O Network Connection Parameters
 
             //----------------Transport Type/Trigger
-            commonPacketFormat.Data.Add(0x01);
+            commonPacketFormat.Data.Add(this.TransportType); //3-4.3.3. transportClass_trigger Attribute - USINT data type
             //X------- = 0= Client; 1= Server
             //-XXX---- = Production Trigger, 0 = Cyclic, 1 = CoS, 2 = Application Object
             //----XXXX = Transport class, 0 = Class 0, 1 = Class 1, 2 = Class 2, 3 = Class 3
             //----------------Transport Type Trigger
-            //Connection Path size 
-            commonPacketFormat.Data.Add((byte)((0x2) + (O_T_ConnectionType == ConnectionType.Null ? 0 : 1) + (T_O_ConnectionType == ConnectionType.Null ? 0 : 1) ));
-            //Verbindugspfad
-            commonPacketFormat.Data.Add((byte)(0x20));
-            commonPacketFormat.Data.Add((byte)(AssemblyObjectClass));
-            commonPacketFormat.Data.Add((byte)(0x24));
-            commonPacketFormat.Data.Add((byte)(ConfigurationAssemblyInstanceID));
-            if (O_T_ConnectionType != ConnectionType.Null)
+
+            if (this.TransportClass == 0 || this.TransportClass == 1) //Transport Class 0 or 1 uses UDP
             {
-                commonPacketFormat.Data.Add((byte)(0x2C));
-                commonPacketFormat.Data.Add((byte)(O_T_InstanceID));
-            }
-            if (T_O_ConnectionType != ConnectionType.Null)
-            {
-                commonPacketFormat.Data.Add((byte)(0x2C));
-                commonPacketFormat.Data.Add((byte)(T_O_InstanceID));
-            }
-            
-            //AddSocket Addrress Item O->T
-            
+                //Connection Path size 
+                commonPacketFormat.Data.Add((byte)((0x2) + (O_T_ConnectionType == ConnectionType.Null ? 0 : 1) + (T_O_ConnectionType == ConnectionType.Null ? 0 : 1)));
+                commonPacketFormat.Data.Add(0x20);
+                commonPacketFormat.Data.Add(AssemblyObjectClass);
+                commonPacketFormat.Data.Add(0x24);
+                commonPacketFormat.Data.Add(ConfigurationAssemblyInstanceID);
+                if (O_T_ConnectionType != ConnectionType.Null)
+                {
+                    commonPacketFormat.Data.Add(0x2C);
+                    commonPacketFormat.Data.Add(O_T_InstanceID);
+                }
+                if (T_O_ConnectionType != ConnectionType.Null)
+                {
+                    commonPacketFormat.Data.Add(0x2C);
+                    commonPacketFormat.Data.Add(T_O_InstanceID);
+                }
+
+                //AddSocket Addrress Item O->T
                 commonPacketFormat.SocketaddrInfo_O_T = new Encapsulation.SocketAddress();
                 commonPacketFormat.SocketaddrInfo_O_T.SIN_port = OriginatorUDPPort;
                 commonPacketFormat.SocketaddrInfo_O_T.SIN_family = 2;
-            if (O_T_ConnectionType == ConnectionType.Multicast)
-            {
-                UInt32 multicastResponseAddress = EEIPClient.GetMulticastAddress(BitConverter.ToUInt32(System.Net.IPAddress.Parse(IPAddress).GetAddressBytes(), 0));
-
-                commonPacketFormat.SocketaddrInfo_O_T.SIN_Address = (multicastResponseAddress);
-
-                multicastAddress = commonPacketFormat.SocketaddrInfo_O_T.SIN_Address;
+                if (O_T_ConnectionType == ConnectionType.Multicast)
+                {
+                    UInt32 multicastResponseAddress = EEIPClient.GetMulticastAddress(BitConverter.ToUInt32(System.Net.IPAddress.Parse(IPAddress).GetAddressBytes(), 0));
+                    commonPacketFormat.SocketaddrInfo_O_T.SIN_Address = (multicastResponseAddress);
+                    multicastAddress = commonPacketFormat.SocketaddrInfo_O_T.SIN_Address;
+                }
+                else
+                {
+                    commonPacketFormat.SocketaddrInfo_O_T.SIN_Address = 0;
+                }
             }
-            else
-                commonPacketFormat.SocketaddrInfo_O_T.SIN_Address = 0;
-
+            else //Transport Class 2 or 3 pointing to a PLC
+            {
+                commonPacketFormat.Data.Add(0x03); //connection path size is 3 words (16-bit)
+                commonPacketFormat.Data.AddRange(new byte[6] { 0x01, (byte) this.ProcessorSlot, 0x20, 0x02, 0x24, 0x01 });
+            }
+                
             var encapsulation = BuildUCMMHeader(Encapsulation.CommandsEnum.SendRRData, commonPacketFormat);
             var data = GetUCMMreply(encapsulation, commonPacketFormat, false);
+            var status = (Encapsulation.StatusEnum) BitConverter.ToUInt32(data,8);
 
             //--------------------------BEGIN Error?
-            if (data[42] != 0)      //Exception codes see "Table B-1.1 CIP General Status Codes"
+            if (status != Encapsulation.StatusEnum.Success)
+            {
+                throw new CIPException(status.ToString());
+            }
+            else if (data[42] != 0)      //Exception codes see "Table B-1.1 CIP General Status Codes"
             {
                 if (data[42] == 0x1)
                     if (data[43] == 0)
@@ -449,6 +443,7 @@ namespace Sres.Net.EEIP
                 else
                     throw new CIPException(CIPGeneralStatusCodes.GetStatusName(data[42]));
             }
+            
             //--------------------------END Error?
             //Read the Network ID from the Reply (see 3-3.7.1.1)
             int itemCount = data[30] + (data[31] << 8);
@@ -475,23 +470,25 @@ namespace Sres.Net.EEIP
                 itemCount--;
             }
 
-            //Open UDP-Port
-            System.Net.IPEndPoint endPointReceive = new System.Net.IPEndPoint(System.Net.IPAddress.Any, OriginatorUDPPort);
-            udpClientReceive = new System.Net.Sockets.UdpClient(endPointReceive);
-            UdpState s = new UdpState();
-            s.e = endPointReceive;
-            s.u = udpClientReceive;
-            if (multicastAddress != 0)
+            if (this.TransportClass == 0 || this.TransportClass == 1) //Transport Class 0 or 1 uses UDP
             {
-                System.Net.IPAddress multicast = (new System.Net.IPAddress(multicastAddress));
-                udpClientReceive.JoinMulticastGroup(multicast);
-              
+                //Open UDP-Port
+                System.Net.IPEndPoint endPointReceive = new System.Net.IPEndPoint(System.Net.IPAddress.Any, OriginatorUDPPort);
+                udpClientReceive = new System.Net.Sockets.UdpClient(endPointReceive);
+                UdpState s = new UdpState();
+                s.e = endPointReceive;
+                s.u = udpClientReceive;
+                if (multicastAddress != 0)
+                {
+                    System.Net.IPAddress multicast = (new System.Net.IPAddress(multicastAddress));
+                    udpClientReceive.JoinMulticastGroup(multicast);
+                }
+
+                System.Threading.Thread sendThread = new System.Threading.Thread(sendUDP);
+                sendThread.Start();
+
+                var asyncResult = udpClientReceive.BeginReceive(new AsyncCallback(ReceiveCallbackClass1), s);
             }
-
-            System.Threading.Thread sendThread = new System.Threading.Thread(sendUDP);
-            sendThread.Start();
-
-            var asyncResult = udpClientReceive.BeginReceive(new AsyncCallback(ReceiveCallbackClass1), s);
         }
 
         private ushort o_t_detectedLength;
@@ -871,6 +868,44 @@ namespace Sres.Net.EEIP
         }
 
         /// <summary>
+        /// Implementation of Common Service "Get_Attribute_All" - Service Code: 0x01
+        /// </summary>
+        /// <param name="classID">Class id of requested Attributes</param> 
+        public byte[] GetAttributeAll(int classID)
+        {
+            return this.GetAttributeAll(classID, 0);
+        }
+
+        public byte[] MultiServicePacket(List<byte[]> services)
+        {
+            Encapsulation.CommonPacketFormat commonPacketFormat = new Encapsulation.CommonPacketFormat();
+            var requestPathData = GetEPath(0x02, 0x01, 0x00);
+
+            //Common Packet Format Data
+            commonPacketFormat.Data.Add((byte)CIPCommonServices.Multiple_Service_Packet); //requested service
+            commonPacketFormat.Data.Add(0x02); //Requested Path size (number of 16 bit words)
+            //Request Path
+            commonPacketFormat.Data.AddRange(requestPathData); //Request Path
+            commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt16)services.Count()));
+
+            var offset = 2 + 2 * services.Count();
+            foreach (var service in services) //Add length of each service
+            {
+                commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt16)offset));
+                offset += service.Length;
+            }
+            foreach (var service in services)
+            {
+                commonPacketFormat.Data.AddRange(service);
+            }
+
+            var encapsulation = BuildUCMMHeader(Encapsulation.CommandsEnum.SendRRData, commonPacketFormat);
+            var recvData = GetUCMMreply(encapsulation, commonPacketFormat);
+
+            return recvData.Skip(44).ToArray();
+        }
+
+        /// <summary>
         /// Get the Encrypted Request Path - See Volume 1 Appendix C (C9)
         /// e.g. for 8 Bit: 20 05 24 02 30 01
         /// for 16 Bit: 21 00 05 00 24 02 30 01
@@ -925,15 +960,6 @@ namespace Sres.Net.EEIP
             return returnData.ToArray();
         }
 
-        /// <summary>
-        /// Implementation of Common Service "Get_Attribute_All" - Service Code: 0x01
-        /// </summary>
-        /// <param name="classID">Class id of requested Attributes</param> 
-        public byte[] GetAttributeAll(int classID)
-        {
-            return this.GetAttributeAll(classID, 0);
-        }
-
         public Encapsulation BuildUCMMHeader(Encapsulation.CommandsEnum command, Encapsulation.CommonPacketFormat commonPacketFormat)
         {
             var header = new Encapsulation();
@@ -952,7 +978,7 @@ namespace Sres.Net.EEIP
             commonPacketFormat.DataItem = 0xB2; //Data item
             commonPacketFormat.DataLength = (UInt16)commonPacketFormat.Data.Count;  //Get common packet format data length
 
-            header.Length = (UInt16)(16 + commonPacketFormat.DataLength); //Get encapsulated packet length
+            header.Length = (UInt16)(16 + commonPacketFormat.DataLength + (commonPacketFormat.SocketaddrInfo_O_T == null ? 0 : 24)); //Get encapsulated packet length
 
             return header;
         }
@@ -980,6 +1006,7 @@ namespace Sres.Net.EEIP
             //Exception codes see "Table B-1.1 CIP General Status Codes"
             if (!statusCode.ContainsKey(CIPGeneralStatusCodes.CIP_SERVICE_SUCCESS)) 
             {
+                //var extendedStatusCode = 
                 throw new CIPException(statusCode.Values.First());
             }
 

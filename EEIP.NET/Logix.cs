@@ -351,35 +351,6 @@ namespace Sres.Net.EEIP
             }
             return MultiServicePacket(services);
         }
-
-        public byte[] MultiServicePacket(List<byte[]> services)
-        {
-            Encapsulation.CommonPacketFormat commonPacketFormat = new Encapsulation.CommonPacketFormat();
-            var requestPathData = GetEPath(0x02,0x01,0x00);
-
-            //Common Packet Format Data
-            commonPacketFormat.Data.Add((byte)CIPCommonServices.Multiple_Service_Packet); //requested service
-            commonPacketFormat.Data.Add(0x02); //Requested Path size (number of 16 bit words)
-            //Request Path
-            commonPacketFormat.Data.AddRange(requestPathData); //Request Path
-            commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt16)services.Count()));
-
-            var offset = 2 + 2 * services.Count();
-            foreach (var service in services) //Add length of each service
-            {
-                commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt16)offset));
-                offset += service.Length;
-            }
-            foreach (var service in services)
-            {
-                commonPacketFormat.Data.AddRange(service);
-            }
-
-            var encapsulation = BuildUCMMHeader(Encapsulation.CommandsEnum.SendRRData, commonPacketFormat);
-            var recvData = GetUCMMreply(encapsulation, commonPacketFormat);
-
-            return recvData.Skip(44).ToArray();
-        }
     }
 
     public class LogixTag

@@ -18,6 +18,12 @@ namespace ConsoleApplication1
             plc.IPAddress = "10.100.21.30";
             plc.RegisterSession();
 
+            //Testing Forward open
+            plc.TransportType = 0x83;
+            //plc.ForwardOpen();
+
+            //plc.ForwardClose();
+
             byte[] response = plc.GetAttributeSingle(0x01, 1, 1);
             var resp_identity = (response[1] << 8 | response[0]).ToString();
             Console.WriteLine("Revision of identity object is " + resp_identity);
@@ -121,6 +127,7 @@ namespace ConsoleApplication1
             var readTags = new List<string>() { "testEIPWrite","fromVision"};
             var writeTags = new List<Tuple<string, UInt16, byte[]>>();
             writeTags.Add(Tuple.Create("testEIPwrite", (UInt16)0x00C4, BitConverter.GetBytes(testval)));
+            writeTags.Add(Tuple.Create("fromVision.towerCamera[0].offset1", (UInt16)0xCA, BitConverter.GetBytes(1234.5678f)));
             var resp = plc.MultiReadWrite(readTags, writeTags);
             Console.WriteLine();
             Console.WriteLine("Multi read/write succeeded!");
@@ -145,6 +152,7 @@ namespace ConsoleApplication1
 
             for (int i = 0; i <= 100; i++)
             {
+                //Console.WriteLine("Elapsed time {0} ms", stopWatch.ElapsedMilliseconds);
                 writeTags[0] = (Tuple.Create("testEIPwrite",(UInt16) 0x00C4, BitConverter.GetBytes(testval++)));
                 resp = plc.MultiReadWrite(readTags, writeTags);
                 numTags = resp[1] << 8 | resp[0];
@@ -157,7 +165,7 @@ namespace ConsoleApplication1
                         if (resp[offsetIndex+4] == 0xC4)
                         {
                             var readval = BitConverter.ToInt32(resp.ToArray(), offsetIndex + 6);
-                            //Console.WriteLine(readval);
+                            Console.WriteLine(readval);
                         }
                     }  
                 }
