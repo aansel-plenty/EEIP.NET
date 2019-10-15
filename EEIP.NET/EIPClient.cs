@@ -362,9 +362,12 @@ namespace Sres.Net.EEIP
                 connectionSize = (ushort)(O_T_Length + o_t_headerOffset); //The maximum size in bytes of the data for each direction (where applicable) of the connection. For a variable -> maximum
                 networkConnectionParameters = (UInt16)(((Convert.ToUInt16(redundantOwner)) << 15) | ((connectionType & 0x03) << 13) | ((priority & 0x03) << 10) | ((Convert.ToUInt16(variableLength)) << 9));
             }
-            //Reuse connection parameters for Class 2 or 3
+            else //Reuse connection parameters for Class 2 or 3
+            {
+                connectionSize = this.ConnectionSize;
+            }
 
-            if (largeForwardOpen)
+                if (largeForwardOpen)
             {
                 networkConnectionParameters <<= 16;
                 networkConnectionParameters |= ((UInt16) (connectionSize & 0xFFFF));
