@@ -17,17 +17,19 @@ namespace Sres.Net.EEIP
         private UInt32 connectionID_O_T;
         private UInt32 connectionID_T_O;
         private UInt32 multicastAddress;
-        private UInt16 connectionSerialNumber;
-        public ushort VendorID = 0x00FF; //Pretend to be Bosch Rexroth I guess
+        protected UInt16 ConnectionSerialNumber;
+        public bool IsConnected { get => this.ConnectionSerialNumber != 0; }
+        private UInt16? ConnectionSequenceCounter = 0;
         private UInt64 context = 0x00000000;
+        public ushort VendorID = 0x00FF; //Pretend to be Bosch Rexroth I guess
         public uint SerialNumber = 0xFFFF;
-        
         public uint ConnectionSize = 504;
         public List<byte> ConnectionPath = new List<byte>();
         /// <summary>
         /// TCP-Port of the Server - Standard is 0xAF12 44818
         /// </summary>
         public ushort TCPPort { get; set; } = 0xAF12;
+        public int TCPClientTimeout { get; set; } = 5000;
         /// <summary>
         /// UDP-Port of the IO-Adapter - Standard is 0x08AE 2222
         /// </summary>
@@ -237,6 +239,8 @@ namespace Sres.Net.EEIP
             encapsulation.CommandSpecificData.AddRange(BitConverter.GetBytes((UInt16) 0x0000)); //Session options shall be set to "0"
 
             client = new TcpClient(this.IPAddress, this.TCPPort);
+            //client.ReceiveTimeout = this.TCPClientTimeout;
+            //client.SendTimeout = this.TCPClientTimeout;
             stream = client.GetStream();
 
             stream.Write(encapsulation.ToBytes(), 0, encapsulation.ToBytes().Length);
@@ -254,7 +258,7 @@ namespace Sres.Net.EEIP
         public void UnRegisterSession()
         {
             //Check if we have an open session
-            if (this.connectionSerialNumber != 0)
+            if (IsConnected)
             {
                 ForwardClose();
             }
@@ -301,7 +305,8 @@ namespace Sres.Net.EEIP
             int lengthOffset = (5 + (O_T_ConnectionType == ConnectionType.Null ? 0 : 2) + (T_O_ConnectionType == ConnectionType.Null ? 0 : 2));
 
             //Common Packet Format (Table 2-6.1)
-            Encapsulation.CommonPacketFormat commonPacketFormat = new Encapsulation.CommonPacketFormat();
+            var commonPacketFormat = new Encapsulation.CommonPacketFormat();
+            this.ConnectionSequenceCounter = 0; //reset packet counter
 
             commonPacketFormat.Data.Add((byte) (largeForwardOpen ? CIPConnectionServices.Large_Forward_Open : CIPConnectionServices.Forward_Open)); //commanded service
             commonPacketFormat.Data.Add(0x02); //Requested Path size
@@ -315,10 +320,10 @@ namespace Sres.Net.EEIP
 
             this.connectionID_O_T = Convert.ToUInt32(new Random().Next(0x1,0xFFFFFFF));
             this.connectionID_T_O = Convert.ToUInt32(new Random().Next(0x1,0xFFFFFFF));
-            this.connectionSerialNumber = Convert.ToUInt16(new Random().Next(0x1,0xFFFF));
+            this.ConnectionSerialNumber = Convert.ToUInt16(new Random().Next(0x1,0xFFFF));
             commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt32) connectionID_O_T));
             commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt32) connectionID_T_O));
-            commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt16) connectionSerialNumber)); //Connection serial number (random)
+            commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt16) ConnectionSerialNumber)); //Connection serial number (random)
             commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt16) this.VendorID)); //Originator Vendor ID
             commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt32) this.SerialNumber)); //Originator Serial Number
             commonPacketFormat.Data.Add(0x03); //Timeout Multiplier
@@ -429,7 +434,7 @@ namespace Sres.Net.EEIP
             }
                 
             var encapsulation = BuildUCMMHeader(Encapsulation.CommandsEnum.SendRRData, commonPacketFormat);
-            var data = GetUCMMreply(encapsulation, commonPacketFormat, false);
+            var data = GetBytes(encapsulation, commonPacketFormat);
             var status = (Encapsulation.StatusEnum) BitConverter.ToUInt32(data,8);
 
             //--------------------------BEGIN Error?
@@ -499,15 +504,8 @@ namespace Sres.Net.EEIP
         {
             stopUDP = true; //First stop the Thread which send data
 
-            int lengthOffset = (5 + (O_T_ConnectionType == ConnectionType.Null ? 0 : 2) + (T_O_ConnectionType == ConnectionType.Null ? 0 : 2));
-
             //Common Packet Format (Table 2-6.1)
-            Encapsulation.CommonPacketFormat commonPacketFormat = new Encapsulation.CommonPacketFormat();
-            commonPacketFormat.ItemCount = 0x02;
-            commonPacketFormat.AddressItem = 0x0000;        //NULL (used for UCMM Messages)
-            commonPacketFormat.AddressLength = 0x0000;
-            commonPacketFormat.DataItem = 0xB2;
-            commonPacketFormat.DataLength = (ushort)(17 + (ushort)lengthOffset);
+            var commonPacketFormat = new Encapsulation.CommonPacketFormat();
             commonPacketFormat.Data.Add((byte)CIPConnectionServices.Forward_Close);
 
             commonPacketFormat.Data.Add(0x02); //Requested Path size
@@ -519,7 +517,7 @@ namespace Sres.Net.EEIP
             commonPacketFormat.Data.Add(0x03); //Priority and Time/Tick - Table 3-5.16 (Vol. 1)
             commonPacketFormat.Data.Add(0xfa); //Timeout Ticks - Table 3-5.16 (Vol. 1)
 
-            commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt16)this.connectionSerialNumber)); //Connection serial number (random)
+            commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt16)this.ConnectionSerialNumber)); //Connection serial number (random)
             commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt16)this.VendorID)); //Originator Vendor ID
             commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt32)this.SerialNumber)); //Originator Serial Number
 
@@ -550,9 +548,9 @@ namespace Sres.Net.EEIP
             }
 
             var encapsulation = BuildUCMMHeader(Encapsulation.CommandsEnum.SendRRData, commonPacketFormat);
-            var recvData = GetUCMMreply(encapsulation, commonPacketFormat);
+            var recvData = GetReply(encapsulation, commonPacketFormat);
 
-            this.connectionSerialNumber = 0; //clear out serial number
+            this.ConnectionSerialNumber = 0; //clear out serial number
             //Todo clean up access to Transport class there should be a property for the trigger type and it should get used in Forward Open
             if (this.TransportClass == 0 || this.TransportClass == 1) //Transport Class 0 or 1 uses UDP
             {
@@ -560,6 +558,133 @@ namespace Sres.Net.EEIP
                 udpClientReceiveClosed = true;
                 udpClientReceive.Close();
             }
+        }
+
+        public Encapsulation BuildHeader(Encapsulation.CommonPacketFormat commonPacketFormat)
+        {
+            if (this.IsConnected)
+            {
+                return BuildCMMHeader(Encapsulation.CommandsEnum.SendUnitData, commonPacketFormat);
+            }
+            else
+            {
+                return BuildUCMMHeader(Encapsulation.CommandsEnum.SendRRData, commonPacketFormat);
+            }
+        }
+
+        public Encapsulation BuildUCMMHeader(Encapsulation.CommandsEnum command, Encapsulation.CommonPacketFormat commonPacketFormat)
+        {
+            var header = new Encapsulation();
+
+            header.Command = command;
+            header.SessionHandle = this.sessionHandle;
+
+            //Command specific data
+            header.CommandSpecificData.AddRange(new byte[4]); //CIP interface handle
+            header.CommandSpecificData.AddRange(new byte[2]); //Timeout
+
+            //Common Packet Format (Table 2-6.1)
+            commonPacketFormat.ItemCount = 0x02;
+            commonPacketFormat.AddressTypeID = 0x0000; //Address item NULL (used for UCMM Messages)
+            commonPacketFormat.AddressLength = 0x0000;
+            commonPacketFormat.DataTypeID = 0xB2; //Data item
+            commonPacketFormat.DataLength = (UInt16)commonPacketFormat.Data.Count;  //Get common packet format data length
+
+            header.Length = (UInt16)(16 + commonPacketFormat.DataLength);
+            if (commonPacketFormat.SocketaddrInfo_O_T != null) 
+            {
+                header.Length += 24; //Get encapsulated packet length
+            }
+
+            return header;
+        }
+
+        public Encapsulation BuildCMMHeader(Encapsulation.CommandsEnum command, Encapsulation.CommonPacketFormat commonPacketFormat)
+        {
+            var header = new Encapsulation();
+
+            header.Command = command;
+            header.SessionHandle = this.sessionHandle;
+
+            //Command specific data
+            header.CommandSpecificData.AddRange(new byte[4]); //CIP interface handle
+            header.CommandSpecificData.AddRange(new byte[2]); //Timeout
+
+            //Common Packet Format (Table 2-6.1)
+            commonPacketFormat.ItemCount = 0x02;
+            commonPacketFormat.AddressTypeID = 0x00A1; //Address item for connected messages
+            commonPacketFormat.AddressLength = 0x0004;
+            commonPacketFormat.AddressData.AddRange(BitConverter.GetBytes((UInt32)this.connectionID_O_T));
+            commonPacketFormat.DataTypeID = 0xB1; //Data item
+            commonPacketFormat.SequenceNumber = ++this.ConnectionSequenceCounter;
+            commonPacketFormat.DataLength = (UInt16) (commonPacketFormat.Data.Count+2);  //Get common packet format data length
+
+            header.Length = (UInt16)(20 + commonPacketFormat.DataLength);
+            if (commonPacketFormat.SocketaddrInfo_O_T != null)
+            {
+                header.Length += 24; //Get encapsulated packet length
+            }
+
+            this.ConnectionSequenceCounter %= UInt16.MaxValue; //prevent overflow on sequence counter. might be unnecessary
+
+            return header;
+        }
+
+        protected Tuple<byte,byte[]> GetReply(Encapsulation encapsulation, Encapsulation.CommonPacketFormat commonPacketFormat)
+        {
+            if (this.sessionHandle == 0) //If a Session is not registered, Try to Register a Session with the predefined IP-Address and Port
+                this.RegisterSession();
+
+            byte[] dataToWrite = new byte[encapsulation.ToBytes().Length + commonPacketFormat.ToBytes().Length];
+            System.Buffer.BlockCopy(encapsulation.ToBytes(), 0, dataToWrite, 0, encapsulation.ToBytes().Length);
+            System.Buffer.BlockCopy(commonPacketFormat.ToBytes(), 0, dataToWrite, encapsulation.ToBytes().Length, commonPacketFormat.ToBytes().Length);
+
+            byte[] recvBuffer = new byte[1024];
+            stream.Write(dataToWrite, 0, dataToWrite.Length);
+            var recvLength = stream.Read(recvBuffer, 0, recvBuffer.Length);
+            var replyOffset = 40;
+            switch (encapsulation.Command)
+            {
+                case Encapsulation.CommandsEnum.SendRRData:
+                    replyOffset = 40;
+                    break;
+                case Encapsulation.CommandsEnum.SendUnitData:
+                    replyOffset = 46;
+                    break;
+                default:
+                    break;
+            }
+
+            var statusCode = recvBuffer[replyOffset + 2];
+            var status = CIPGeneralStatusCodes.GetStatus(statusCode);
+
+            //Exception codes see "Table B-1.1 CIP General Status Codes"
+            if (!status.ContainsKey(CIPGeneralStatusCodes.CIP_SERVICE_SUCCESS))
+            {
+                //Assuming single int 16 extended status code for now
+                var extendedStatusCode = BitConverter.ToInt16(recvBuffer, replyOffset + 4);
+                throw new CIPException(status.Values.First());
+            }
+
+            var replyData = recvBuffer.Skip(replyOffset).Take(recvLength - replyOffset).ToArray();
+
+            return Tuple.Create(statusCode,replyData);
+        }
+
+        protected byte[] GetBytes(Encapsulation encapsulation, Encapsulation.CommonPacketFormat commonPacketFormat)
+        {
+            if (this.sessionHandle == 0) //If a Session is not registered, Try to Register a Session with the predefined IP-Address and Port
+                this.RegisterSession();
+
+            byte[] dataToWrite = new byte[encapsulation.ToBytes().Length + commonPacketFormat.ToBytes().Length];
+            System.Buffer.BlockCopy(encapsulation.ToBytes(), 0, dataToWrite, 0, encapsulation.ToBytes().Length);
+            System.Buffer.BlockCopy(commonPacketFormat.ToBytes(), 0, dataToWrite, encapsulation.ToBytes().Length, commonPacketFormat.ToBytes().Length);
+
+            byte[] recvBuffer = new byte[1024];
+            stream.Write(dataToWrite, 0, dataToWrite.Length);
+            var recvLength = stream.Read(recvBuffer, 0, recvBuffer.Length);
+
+            return recvBuffer.Take(recvLength).ToArray();
         }
 
         private ushort o_t_detectedLength;
@@ -773,9 +898,9 @@ namespace Sres.Net.EEIP
             commonPacketFormat.Data.AddRange(requestPathData); //Request Path
 
             var encapsulation = BuildUCMMHeader(Encapsulation.CommandsEnum.SendRRData, commonPacketFormat);
-            var recvData = GetUCMMreply(encapsulation, commonPacketFormat);
+            var reply = GetReply(encapsulation, commonPacketFormat);
 
-            return recvData.Skip(44).ToArray(); //Start at reply service in the message reply field
+            return reply.Item2.Skip(4).ToArray(); //Start at reply service in the message reply field
         }
 
         /// <summary>
@@ -796,10 +921,10 @@ namespace Sres.Net.EEIP
             //Request Path
             commonPacketFormat.Data.AddRange(requestPathData); //Request Path
 
-            var encapsulation = BuildUCMMHeader(Encapsulation.CommandsEnum.SendRRData, commonPacketFormat);
-            var recvData = GetUCMMreply(encapsulation, commonPacketFormat);
+            var encapsulation = BuildHeader(commonPacketFormat);
+            var reply = GetReply(encapsulation, commonPacketFormat);
 
-            return recvData.Skip(44).ToArray(); //Start at reply service in the message reply field
+            return reply.Item2.Skip(2).ToArray(); //Start at reply service in the message reply field
         }
 
         /// <summary>
@@ -826,10 +951,10 @@ namespace Sres.Net.EEIP
                 commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt16)attribute)); //attribute ID
             }
 
-            var encapsulation = BuildUCMMHeader(Encapsulation.CommandsEnum.SendRRData, commonPacketFormat);
-            var recvData = GetUCMMreply(encapsulation, commonPacketFormat);
+            var encapsulation = BuildHeader(commonPacketFormat);
+            var reply = GetReply(encapsulation, commonPacketFormat);
 
-            return recvData.Skip(40).ToArray(); //Start at reply service in the message reply field
+            return reply.Item2.ToArray(); //Start at reply service in the message reply field
         }
 
         public byte[] SetAttributeSingle(int classID, int instanceID, int attributeID, byte[] value)
@@ -845,10 +970,10 @@ namespace Sres.Net.EEIP
             commonPacketFormat.Data.AddRange(requestPathData); //Request Path
             commonPacketFormat.Data.AddRange(value); //Attribute data
 
-            var encapsulation = BuildUCMMHeader(Encapsulation.CommandsEnum.SendRRData, commonPacketFormat);
-            var recvData = GetUCMMreply(encapsulation, commonPacketFormat);
+            var encapsulation = BuildHeader(commonPacketFormat);
+            var reply = GetReply(encapsulation, commonPacketFormat);
 
-            return recvData.Skip(44).ToArray(); //Start at reply service in the message reply field
+            return reply.Item2.Skip(2).ToArray(); //Start at reply service in the message reply field
         }
 
         /// <summary>
@@ -883,10 +1008,11 @@ namespace Sres.Net.EEIP
                 commonPacketFormat.Data.AddRange(service);
             }
 
-            var encapsulation = BuildUCMMHeader(Encapsulation.CommandsEnum.SendRRData, commonPacketFormat);
-            var recvData = GetUCMMreply(encapsulation, commonPacketFormat);
+            var encapsulation = BuildHeader(commonPacketFormat);
+            var reply = GetReply(encapsulation, commonPacketFormat);
+            var recvData = reply.Item2;
 
-            return recvData.Skip(44).ToArray();
+            return recvData.Skip(4).ToArray();
         }
 
         /// <summary>
@@ -942,60 +1068,6 @@ namespace Sres.Net.EEIP
             }
 
             return returnData.ToArray();
-        }
-
-        public Encapsulation BuildUCMMHeader(Encapsulation.CommandsEnum command, Encapsulation.CommonPacketFormat commonPacketFormat)
-        {
-            var header = new Encapsulation();
-
-            header.Command = command;
-            header.SessionHandle = this.sessionHandle;
-
-            //Command specific data
-            header.CommandSpecificData.AddRange(new byte[4]); //CIP interface handle
-            header.CommandSpecificData.AddRange(new byte[2]); //Timeout
-
-            //Common Packet Format (Table 2-6.1)
-            commonPacketFormat.ItemCount = 0x02;
-            commonPacketFormat.AddressItem = 0x0000; //Address item NULL (used for UCMM Messages)
-            commonPacketFormat.AddressLength = 0x0000;
-            commonPacketFormat.DataItem = 0xB2; //Data item
-            commonPacketFormat.DataLength = (UInt16)commonPacketFormat.Data.Count;  //Get common packet format data length
-
-            header.Length = (UInt16)(16 + commonPacketFormat.DataLength + (commonPacketFormat.SocketaddrInfo_O_T == null ? 0 : 24)); //Get encapsulated packet length
-
-            return header;
-        }
-
-        protected byte[] GetUCMMreply(Encapsulation encapsulation, Encapsulation.CommonPacketFormat commonPacketFormat)
-        {
-            return GetUCMMreply(encapsulation, commonPacketFormat, true);
-        }
-
-        protected byte[] GetUCMMreply(Encapsulation encapsulation,Encapsulation.CommonPacketFormat commonPacketFormat, bool checkResponse)
-        {
-            if (this.sessionHandle == 0) //If a Session is not registered, Try to Register a Session with the predefined IP-Address and Port
-                this.RegisterSession();
-
-            byte[] dataToWrite = new byte[encapsulation.ToBytes().Length + commonPacketFormat.ToBytes().Length];
-            System.Buffer.BlockCopy(encapsulation.ToBytes(), 0, dataToWrite, 0, encapsulation.ToBytes().Length);
-            System.Buffer.BlockCopy(commonPacketFormat.ToBytes(), 0, dataToWrite, encapsulation.ToBytes().Length, commonPacketFormat.ToBytes().Length);
-
-            byte[] recvBuffer = new byte[1024];
-            stream.Write(dataToWrite, 0, dataToWrite.Length);
-            var recvLength = stream.Read(recvBuffer, 0, recvBuffer.Length);
-
-            var statusCode = CIPGeneralStatusCodes.GetStatus(recvBuffer[42]);
-
-            //Exception codes see "Table B-1.1 CIP General Status Codes"
-            if (!statusCode.ContainsKey(CIPGeneralStatusCodes.CIP_SERVICE_SUCCESS)) 
-            {
-                //Assuming single int 16 extended status code for now
-                var extendedStatusCode = BitConverter.ToInt16(recvBuffer, 44);
-                throw new CIPException(statusCode.Values.First());
-            }
-
-            return recvBuffer.Take(recvLength).ToArray();
         }
 
         ObjectLibrary.IdentityObject identityObject;

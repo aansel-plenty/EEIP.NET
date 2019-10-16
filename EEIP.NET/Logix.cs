@@ -57,7 +57,7 @@ namespace Sres.Net.EEIP
         public static Dictionary<string, Tuple<byte, int>> TagStringTypes = new Dictionary<string, Tuple<byte, int>>();
 
         public Dictionary<string, LogixTag> TagCache = new Dictionary<string, LogixTag>();
-        private bool RefreshTagRegistry = true;
+        private bool RefreshTagCache = true;
         private List<int> LastControllerState = new List<int>() { 1, 1, 1, 1, 1 };
         private List<int> ControllerState = new List<int>() { 0, 0, 0, 0, 0 };
 
@@ -86,7 +86,6 @@ namespace Sres.Net.EEIP
         public bool CheckForControllerChange()
         {
             var attributes = new List<UInt16>() { 1, 2, 3, 4, 10 };
-            //TODO: read something
             var reply = GetAttributeList(0xAC, 0x0001, attributes);
 
             var replyService = reply[0];
@@ -97,15 +96,17 @@ namespace Sres.Net.EEIP
             var offset = 6;
 
             //Check general status
-            if (!this.RefreshTagRegistry)
+            if (!this.RefreshTagCache)
             {
                 switch (generalStatus)
                 {
                     case 0x05:
                         Console.WriteLine("Read general status 0x05: Path not known, download is in progress");
+                        this.RefreshTagCache = true;
                         break;
                     case 0x10:
                         Console.WriteLine("Read general status 0x10: Device state conflict, controller is password locked");
+                        this.RefreshTagCache = true;
                         break;
                     default:
                         break;
@@ -122,7 +123,7 @@ namespace Sres.Net.EEIP
                 }
                 else
                 {
-                    this.RefreshTagRegistry = true;
+                    this.RefreshTagCache = true;
                 }
             }
             offset += 2;
@@ -138,7 +139,7 @@ namespace Sres.Net.EEIP
                 }
                 else
                 {
-                    this.RefreshTagRegistry = true;
+                    this.RefreshTagCache = true;
                 }
             }
             offset += 2;
@@ -154,7 +155,7 @@ namespace Sres.Net.EEIP
                 }
                 else
                 {
-                    this.RefreshTagRegistry = true;
+                    this.RefreshTagCache = true;
                 }
             }
             offset += 4;
@@ -170,7 +171,7 @@ namespace Sres.Net.EEIP
                 }
                 else
                 {
-                    this.RefreshTagRegistry = true;
+                    this.RefreshTagCache = true;
                 }
             }
             offset += 4;
@@ -186,23 +187,23 @@ namespace Sres.Net.EEIP
                 }
                 else
                 {
-                    this.RefreshTagRegistry = true;
+                    this.RefreshTagCache = true;
                 }
             }
 
             if (!ControllerState.Equals(LastControllerState))
             {
-                this.RefreshTagRegistry = true;
+                this.RefreshTagCache = true;
             }
 
-            if (this.RefreshTagRegistry)
+            if (this.RefreshTagCache)
             {
                 TagCache.Clear();
             }
 
             LastControllerState = ControllerState;
 
-            return this.RefreshTagRegistry;
+            return this.RefreshTagCache;
         }
 
         /// <summary>
@@ -308,12 +309,13 @@ namespace Sres.Net.EEIP
 
             commonPacketFormat.Data.AddRange(BuildReadTagData(tagPath));
 
-            var encapsulation = BuildUCMMHeader(Encapsulation.CommandsEnum.SendRRData, commonPacketFormat);
-            var recvData = GetUCMMreply(encapsulation, commonPacketFormat);
+            var encapsulation = BuildHeader(commonPacketFormat);
+            var reply = GetReply(encapsulation, commonPacketFormat);
+            var recvData = reply.Item2;
 
-            var tagTypeServiceParam = (UInt16)(recvData[45] << 8 | recvData[44]);
+            var tagTypeServiceParam = (UInt16)(recvData[5] << 8 | recvData[4]);
             var isUDT = (tagTypeServiceParam == 0x02A0);
-            var replyDataOffset = isUDT ? 48 : 46;
+            var replyDataOffset = isUDT ? 8 : 6;
             var returnData = new byte[recvData.Length - replyDataOffset];
 
             if (!TagCache.ContainsKey(tagPath)) //Add tag to registry
@@ -322,7 +324,7 @@ namespace Sres.Net.EEIP
                 {
                     TagName = tagPath,
                     SymbolType = tagTypeServiceParam,
-                    StructureHandle = (UInt16)(isUDT ? ((recvData[47] << 8) | recvData[46]) : 0x0000)
+                    StructureHandle = (UInt16)(isUDT ? ((recvData[7] << 8) | recvData[6]) : 0x0000)
                 };
             }
 
@@ -366,8 +368,8 @@ namespace Sres.Net.EEIP
 
             commonPacketFormat.Data.AddRange(BuildWriteTagData(tagPath, tagType, tagData));
 
-            var encapsulation = BuildUCMMHeader(Encapsulation.CommandsEnum.SendRRData, commonPacketFormat);
-            var recvData = GetUCMMreply(encapsulation, commonPacketFormat);
+            var encapsulation = BuildHeader(commonPacketFormat);
+            var reply = GetReply(encapsulation, commonPacketFormat);
 
             return true;
         }

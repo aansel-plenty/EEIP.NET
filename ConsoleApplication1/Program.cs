@@ -149,11 +149,14 @@ namespace ConsoleApplication1
 
             //Time 100 multi read writes
             stopWatch.Restart();
+            transplanter.Heartbeat = testval;
 
             for (int i = 0; i <= 100; i++)
             {
                 //Console.WriteLine("Elapsed time {0} ms", stopWatch.ElapsedMilliseconds);
-                writeTags[0] = (Tuple.Create("fromVision.heartbeat", BitConverter.GetBytes(testval++)));
+                writeTags[0] = (Tuple.Create("testEIPWrite", BitConverter.GetBytes(testval++)));
+                transplanter.Heartbeat++;
+                writeTags[1] = (Tuple.Create("fromVision", transplanter.GetBytesToWrite()));
                 resp = plc.MultiReadWrite(readTags, writeTags);
                 numTags = resp[1] << 8 | resp[0];
                 for (int j = 0; j < numTags; j++)
@@ -182,7 +185,7 @@ namespace ConsoleApplication1
             //    plc.WriteTagSingle("fromVision.heartbeat", transplanter.GetBytesToWrite());
             //    Thread.Sleep(25);
             //}
-
+            //
             //Console.WriteLine("Elapsed time {0} ms",stopWatch.ElapsedMilliseconds);
 
             plc.UnRegisterSession();
