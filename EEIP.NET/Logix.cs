@@ -55,7 +55,7 @@ namespace Sres.Net.EEIP
         };
         public static Dictionary<string, Tuple<byte, int>> TagStringTypes = new Dictionary<string, Tuple<byte, int>>();
 
-        public Dictionary<string, LogixTag> TagRegistry = new Dictionary<string, LogixTag>();
+        public Dictionary<string, LogixTag> TagCache = new Dictionary<string, LogixTag>();
         private bool RefreshTagRegistry = true;
         private List<int> LastControllerState = new List<int>() { 1, 1, 1, 1, 1 };
         private List<int> ControllerState = new List<int>() { 0, 0, 0, 0, 0 };
@@ -85,13 +85,16 @@ namespace Sres.Net.EEIP
             //Check general status
             if (!this.RefreshTagRegistry)
             {
-                if (generalStatus == 0x05)
+                switch (generalStatus)
                 {
-                    Console.WriteLine("Read general status 0x05: Path not known, download is in progress");
-                }
-                else if (generalStatus == 0x10)
-                {
-                    Console.WriteLine("Read general status 0x10: Device state conflict, controller is password locked");
+                    case 0x05:
+                        Console.WriteLine("Read general status 0x05: Path not known, download is in progress");
+                        break;
+                    case 0x10:
+                        Console.WriteLine("Read general status 0x10: Device state conflict, controller is password locked");
+                        break;
+                    default:
+                        break;
                 }
             }
             
@@ -180,7 +183,7 @@ namespace Sres.Net.EEIP
 
             if (this.RefreshTagRegistry)
             {
-                TagRegistry.Clear();
+                TagCache.Clear();
             }
 
             LastControllerState = ControllerState;
@@ -299,9 +302,9 @@ namespace Sres.Net.EEIP
             var replyDataOffset = isUDT ? 48 : 46;
             var returnData = new byte[recvData.Length - replyDataOffset];
 
-            if (!TagRegistry.ContainsKey(tagPath))
+            if (!TagCache.ContainsKey(tagPath)) //Add tag to registry
             {
-                TagRegistry[tagPath] = new LogixTag()
+                TagCache[tagPath] = new LogixTag()
                 {
                     TagName = tagPath,
                     SymbolType = tagTypeServiceParam,
@@ -311,7 +314,7 @@ namespace Sres.Net.EEIP
 
             System.Buffer.BlockCopy(recvData, replyDataOffset, returnData, 0, recvData.Length - replyDataOffset);
 
-            var tag = TagRegistry[tagPath];
+            var tag = TagCache[tagPath];
             tag.rawData = returnData.ToList();
             tag.UpdateValue();
 
@@ -327,6 +330,14 @@ namespace Sres.Net.EEIP
             data.Add((byte)(requestPathData.Length / 2)); //Requested Path size (number of 16 bit words)
             data.AddRange(requestPathData); //Request Path
             data.AddRange(BitConverter.GetBytes(tagType)); //get the type of the tag
+            //For structs add the structure handle
+            if (TagCache.TryGetValue(tagPath,out LogixTag value))
+            {
+                if (value.DataKeyword == "STRUCT")
+                {
+                    data.AddRange(BitConverter.GetBytes(value.StructureHandle));
+                }
+            }
             data.AddRange(BitConverter.GetBytes((Int16)0x0001)); //Number of elements to write
             data.AddRange(tagData);
 
@@ -347,7 +358,18 @@ namespace Sres.Net.EEIP
             return true;
         }
 
-        public byte[] MultiReadWrite(List<string> readTags, List<Tuple<string,UInt16,byte[]>> writeTags)
+        public bool WriteTagSingle(string tagPath, byte[] tagData)
+        {
+            if (!TagCache.TryGetValue(tagPath,out LogixTag tag))
+            {
+                ReadTagSingle(tagPath);  
+            }
+            return WriteTagSingle(tagPath, tag.SymbolType, tagData);
+        }
+
+        //Add read write and controller change
+
+        public byte[] MultiReadWrite(List<string> readTags, List<Tuple<string,byte[]>> writeTags)
         {
             var services = new List<byte[]>();
             //add all read services
@@ -355,9 +377,16 @@ namespace Sres.Net.EEIP
             {
                 services.Add(BuildReadTagData(tag).ToArray());
             }
+            //add all write services
             foreach (var tag in writeTags)
             {
-                services.Add(BuildWriteTagData(tag.Item1, tag.Item2, tag.Item3).ToArray());
+                var tagPath = tag.Item1;
+                var tagData = tag.Item2;
+                if (!TagCache.ContainsKey(tagPath))
+                {
+                    ReadTagSingle(tagPath);
+                }
+                services.Add(BuildWriteTagData(tag.Item1, TagCache[tagPath].SymbolType, tagData).ToArray());
             }
             return MultiServicePacket(services);
         }

@@ -999,7 +999,8 @@ namespace Sres.Net.EEIP
             //Exception codes see "Table B-1.1 CIP General Status Codes"
             if (!statusCode.ContainsKey(CIPGeneralStatusCodes.CIP_SERVICE_SUCCESS)) 
             {
-                //var extendedStatusCode = 
+                //Assuming single int 16 extended status code for now
+                var extendedStatusCode = BitConverter.ToInt16(recvBuffer, 44);
                 throw new CIPException(statusCode.Values.First());
             }
 
@@ -1031,7 +1032,6 @@ namespace Sres.Net.EEIP
                 if (messageRouterObject == null)
                     messageRouterObject = new ObjectLibrary.MessageRouterObject(this);
                 return messageRouterObject;
-
             }
         }
 
@@ -1065,33 +1065,12 @@ namespace Sres.Net.EEIP
         }
 
         /// <summary>
-        /// Converts a bytearray (received e.g. via getAttributeSingle) to ushort
-        /// </summary>
-        /// <param name="byteArray">bytearray to convert</param> 
-        public static ushort ToUshort(byte[] byteArray)
-        {
-            UInt16 returnValue;
-            returnValue = (UInt16)(byteArray[1] << 8 | byteArray[0]);
-            return returnValue;
-        }
-
-        /// <summary>
-        /// Converts a bytearray (received e.g. via getAttributeSingle) to uint
-        /// </summary>
-        /// <param name="byteArray">bytearray to convert</param> 
-        public static uint ToUint(byte[] byteArray)
-        {
-            UInt32 returnValue = ((UInt32)byteArray[3] << 24 | (UInt32)byteArray[2] << 16 | (UInt32)byteArray[1] << 8 | (UInt32)byteArray[0]);
-            return returnValue;
-        }
-
-        /// <summary>
         /// Returns the "Bool" State of a byte Received via getAttributeSingle
         /// </summary>
         /// <param name="inputByte">byte to convert</param> 
         /// <param name="bitposition">bitposition to convert (First bit = bitposition 0)</param> 
         /// <returns>Converted bool value</returns>
-        public static bool ToBool(byte inputByte, int bitposition)
+        public static bool GetBit8(byte inputByte, int bitposition)
         {
            
             return (((inputByte>>bitposition)&0x01) != 0) ? true : false;

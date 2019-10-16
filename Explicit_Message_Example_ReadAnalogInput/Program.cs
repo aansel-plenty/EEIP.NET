@@ -24,8 +24,8 @@ namespace Explicit_Message_Example_ReadAnalogInput
             //Page 202 shows the documentation for instance 6D hex
             byte[] analogInputs = eeipClient.AssemblyObject.getInstance(0x6D);
 
-            Console.WriteLine("Temperature of Analog Input 1: " + (EEIPClient.ToUshort(new byte[] { analogInputs[0], analogInputs[1] }) / 10.0) + "°C");
-            Console.WriteLine("Temperature of Analog Input 2: " + (EEIPClient.ToUshort(new byte[] { analogInputs[2], analogInputs[3] }) / 10.0) + "°C");
+            Console.WriteLine("Temperature of Analog Input 1: " + (BitConverter.ToUInt16(analogInputs,0) / 10.0) + "°C");
+            Console.WriteLine("Temperature of Analog Input 2: " + (BitConverter.ToUInt16(analogInputs,2) / 10.0) + "°C");
             //When done, we unregister the session
             eeipClient.UnRegisterSession();
             Console.ReadKey();

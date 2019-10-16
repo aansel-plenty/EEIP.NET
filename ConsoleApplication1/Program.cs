@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Sres.Net.EEIP;
+using static CM.ConnectionManager;
 
 namespace ConsoleApplication1
 {
@@ -14,9 +15,10 @@ namespace ConsoleApplication1
         static void Main(string[] args)
         {
             var plc = new Logix();
+            var transplanter = new CM.ConnectionManager();
 
-            plc.IPAddress = "10.100.21.20"; //Test PLC
-            //plc.IPAddress = "10.100.21.30"; //Workbench PLC
+            plc.IPAddress = "10.100.21.30"; //Desk PLC
+            //plc.IPAddress = "10.100.21.20"; //Workbench PLC
             //plc.IPAddress = "10.100.25.101"; //Tigris Washer???
             plc.RegisterSession();
 
@@ -69,8 +71,8 @@ namespace ConsoleApplication1
             var testval = testEIPwrite;
             Console.WriteLine(testEIPwrite);
 
-            //now write to the tag
-            var success = plc.WriteTagSingle("testEIPWrite", 0x00C4, BitConverter.GetBytes(testEIPwrite + 1));
+            //now write to the tag utilizing the tag registry
+            var success = plc.WriteTagSingle("testEIPWrite", BitConverter.GetBytes(testEIPwrite + 1));
 
             //read simple udt
             response = plc.ReadTagSingle("toVision");
@@ -89,22 +91,21 @@ namespace ConsoleApplication1
             Console.WriteLine();
             Console.WriteLine(BitConverter.ToString(response));
             Console.WriteLine("Read {0} bytes", response.Length);
-            
-            VisionRecvData visionData = new VisionRecvData();
-            visionData.heartbeat = BitConverter.ToInt32(response,0);
+
+            transplanter.Heartbeat = BitConverter.ToInt32(response,0);
             
             for (int i = 0; i < 8; i++)
             {
-                CameraData c1 = new CameraData();
-                c1.status = BitConverter.ToInt32(response, 4 + 8 * i);
+                var c1 = new CameraResponse();
+                c1.status = (CameraStatus) BitConverter.ToInt32(response, 4 + 8 * i);
                 c1.offset = BitConverter.ToSingle(response, 8 + 8 * i);
-                visionData.cameraData.Add(c1);
+                transplanter.cameraData.Add(c1);
             }
             
             //Just output for debug
             Console.WriteLine();
-            Console.WriteLine("Heartbeat is {0}", visionData.heartbeat);
-            foreach (var item in visionData.cameraData)
+            Console.WriteLine("Heartbeat is {0}", transplanter.Heartbeat);
+            foreach (var item in transplanter.cameraData)
             {
                 Console.WriteLine("Status is {0}, offset is {1}",item.status,item.offset);
             }
@@ -112,25 +113,21 @@ namespace ConsoleApplication1
             Stopwatch stopWatch = new Stopwatch();
             stopWatch.Start();
 
-            //Test read and write latency
-            //for (int i = 0; i <= 100; i++)
-            //{
-            //    response = plc.ReadTagSingle("testEIPWrite");
-            //    var readVal = BitConverter.ToInt32(response, 0);
-            //    var writeVal = readVal + 1;
-            //    testval = writeVal;
-            //    plc.WriteTagSingle("testEIPWrite", 0x00C4, BitConverter.GetBytes(writeVal));
-            //    //Console.WriteLine("Read {0}, Wrote {1}",readVal,writeVal);
-            //    //Console.WriteLine("Elapsed time {0} ms", stopWatch.ElapsedMilliseconds);
-            //}
-            //
-            //Console.WriteLine("Elapsed time {0} ms", stopWatch.ElapsedMilliseconds);
+            //write to a udt utilizing the tag registry
+            //update data
+            var random = new Random();
+            transplanter.Heartbeat++;
+            for (int i = 0; i < transplanter.cameraData.Count; i++)
+            {
+                transplanter.cameraData[i].status++;
+                transplanter.cameraData[i].offset = (float) (1000.0 * random.NextDouble());
+            }
+            plc.WriteTagSingle("fromVision", transplanter.GetBytesToWrite());
 
-            //var readTags = new List<string>() { "testEIPWrite","fromVision"};
-            var readTags = new List<string>() { "testEIPWrite"};
-            var writeTags = new List<Tuple<string, UInt16, byte[]>>();
-            writeTags.Add(Tuple.Create("testEIPwrite", (UInt16)0x00C4, BitConverter.GetBytes(testval)));
-            //writeTags.Add(Tuple.Create("fromVision.towerCamera[0].offset1", (UInt16)0xCA, BitConverter.GetBytes(1234.5678f)));
+            var readTags = new List<string>() { "testEIPWrite","fromVision"};
+            var writeTags = new List<Tuple<string, byte[]>>();
+            writeTags.Add(Tuple.Create("testEIPwrite", BitConverter.GetBytes(testval)));
+            writeTags.Add(Tuple.Create("fromVision", transplanter.GetBytesToWrite()));
             var resp = plc.MultiReadWrite(readTags, writeTags);
             Console.WriteLine();
             Console.WriteLine("Multi read/write succeeded!");
@@ -156,7 +153,7 @@ namespace ConsoleApplication1
             for (int i = 0; i <= 100; i++)
             {
                 //Console.WriteLine("Elapsed time {0} ms", stopWatch.ElapsedMilliseconds);
-                writeTags[0] = (Tuple.Create("testEIPWrite",(UInt16) 0x00C4, BitConverter.GetBytes(testval++)));
+                writeTags[0] = (Tuple.Create("fromVision.heartbeat", BitConverter.GetBytes(testval++)));
                 resp = plc.MultiReadWrite(readTags, writeTags);
                 numTags = resp[1] << 8 | resp[0];
                 for (int j = 0; j < numTags; j++)
@@ -172,6 +169,13 @@ namespace ConsoleApplication1
                         }
                     }  
                 }
+            }
+
+            for (int i = 0; i < 100; i++)
+            {
+                transplanter.Heartbeat++;
+                plc.WriteTagSingle("fromVision.heartbeat", transplanter.GetBytesToWrite());
+                Thread.Sleep(25);
             }
             
             Console.WriteLine("Elapsed time {0} ms",stopWatch.ElapsedMilliseconds);
