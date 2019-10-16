@@ -24,7 +24,7 @@ namespace ConsoleApplication1
 
             //Testing Forward open
             plc.TransportType = 0x83;
-            //plc.ForwardOpen();
+            plc.ForwardOpen();
             //System.Threading.Thread.Sleep(10000);
             //plc.ForwardClose();
 
@@ -171,14 +171,19 @@ namespace ConsoleApplication1
                 }
             }
 
-            for (int i = 0; i < 100; i++)
-            {
-                transplanter.Heartbeat++;
-                plc.WriteTagSingle("fromVision.heartbeat", transplanter.GetBytesToWrite());
-                Thread.Sleep(25);
-            }
-            
-            Console.WriteLine("Elapsed time {0} ms",stopWatch.ElapsedMilliseconds);
+            Console.WriteLine("Elapsed time {0} ms", stopWatch.ElapsedMilliseconds);
+            stopWatch.Restart();
+
+            //Start main task
+
+            //for (int i = 0; i < 100; i++)
+            //{
+            //    transplanter.Heartbeat++;
+            //    plc.WriteTagSingle("fromVision.heartbeat", transplanter.GetBytesToWrite());
+            //    Thread.Sleep(25);
+            //}
+
+            //Console.WriteLine("Elapsed time {0} ms",stopWatch.ElapsedMilliseconds);
 
             plc.UnRegisterSession();
             Console.ReadKey();

@@ -8,6 +8,7 @@ namespace Sres.Net.EEIP
 {
     public class Logix : EEIPClient
     {
+        public int ProcessorSlot = 0; //Location of PLC Processor in Chassis/Rack
         public enum Logix5000Services : byte
         {
             Read_Tag_Service = 0x4C,
@@ -67,6 +68,19 @@ namespace Sres.Net.EEIP
             {
                 TagStringTypes[keyValuePair.Value.Item1] = Tuple.Create(keyValuePair.Key, keyValuePair.Value.Item2);
             }
+        }
+
+        public override void ForwardOpen()
+        {
+            if (this.TransportClass == 0 || this.TransportClass == 1) //Transport Class 0 or 1 uses UDP
+            {
+                
+            }
+            else //Transport Class 2 or 3
+            {
+                this.ConnectionPath = new List<byte> { 0x01, (byte)this.ProcessorSlot, 0x20, 0x02, 0x24, 0x01 };
+            }
+            base.ForwardOpen();
         }
 
         public bool CheckForControllerChange()

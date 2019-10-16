@@ -14,14 +14,16 @@ namespace Sres.Net.EEIP
         TcpClient client;
         NetworkStream stream;
         protected UInt32 sessionHandle;
-        UInt32 connectionID_O_T;
-        UInt32 connectionID_T_O;
-        UInt32 multicastAddress;
-        UInt16 connectionSerialNumber;
+        private UInt32 connectionID_O_T;
+        private UInt32 connectionID_T_O;
+        private UInt32 multicastAddress;
+        private UInt16 connectionSerialNumber;
         public ushort VendorID = 0x00FF; //Pretend to be Bosch Rexroth I guess
+        private UInt64 context = 0x00000000;
         public uint SerialNumber = 0xFFFF;
-        public int ProcessorSlot = 0;
+        
         public uint ConnectionSize = 504;
+        public List<byte> ConnectionPath = new List<byte>();
         /// <summary>
         /// TCP-Port of the Server - Standard is 0xAF12 44818
         /// </summary>
@@ -271,7 +273,7 @@ namespace Sres.Net.EEIP
 
         System.Net.Sockets.UdpClient udpClientReceive;
         bool udpClientReceiveClosed = false;
-        public void ForwardOpen()
+        public virtual void ForwardOpen()
         {
             udpClientReceiveClosed = false;
             ushort o_t_headerOffset = 2;                    //Zählt den Sequencecount und evtl 32bit header zu der Länge dazu
@@ -300,11 +302,6 @@ namespace Sres.Net.EEIP
 
             //Common Packet Format (Table 2-6.1)
             Encapsulation.CommonPacketFormat commonPacketFormat = new Encapsulation.CommonPacketFormat();
-            commonPacketFormat.ItemCount = 0x02;
-            commonPacketFormat.AddressItem = 0x0000;        //NULL (used for UCMM Messages)
-            commonPacketFormat.AddressLength = 0x0000;
-            commonPacketFormat.DataItem = 0xB2;
-            commonPacketFormat.DataLength = (ushort)(41 + lengthOffset + (largeForwardOpen ? 4 : 0));
 
             commonPacketFormat.Data.Add((byte) (largeForwardOpen ? CIPConnectionServices.Large_Forward_Open : CIPConnectionServices.Forward_Open)); //commanded service
             commonPacketFormat.Data.Add(0x02); //Requested Path size
@@ -343,7 +340,6 @@ namespace Sres.Net.EEIP
             else
             {
                 connectionSize = this.ConnectionSize;
-                networkConnectionParameters = 0x4200;
                 networkConnectionParameters = (UInt16)(((Convert.ToUInt16(false)) << 15) | ((connectionType & 0x03) << 13) | ((priority & 0x03) << 10) | ((Convert.ToUInt16(variableLength)) << 9));
             }
                 
@@ -355,7 +351,6 @@ namespace Sres.Net.EEIP
             }
             else
             {
-                //networkConnectionParameters = 0x4200; //TODO: remove
                 networkConnectionParameters |= (UInt16) (connectionSize & 0x1FF);
                 commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt16)networkConnectionParameters));
             }
@@ -379,7 +374,7 @@ namespace Sres.Net.EEIP
                 connectionSize = this.ConnectionSize;
             }
 
-                if (largeForwardOpen)
+            if (largeForwardOpen)
             {
                 networkConnectionParameters <<= 16;
                 networkConnectionParameters |= ((UInt16) (connectionSize & 0xFFFF));
@@ -395,24 +390,22 @@ namespace Sres.Net.EEIP
             //----------------Transport Type/Trigger
             commonPacketFormat.Data.Add(this.TransportType); //3-4.3.3. transportClass_trigger Attribute - USINT data type
 
+            var connectionPath = new List<byte>();
             if (this.TransportClass == 0 || this.TransportClass == 1) //Transport Class 0 or 1 uses UDP
             {
-                //Connection Path size 
-                commonPacketFormat.Data.Add((byte)((0x2) + (O_T_ConnectionType == ConnectionType.Null ? 0 : 1) + (T_O_ConnectionType == ConnectionType.Null ? 0 : 1)));
-                commonPacketFormat.Data.Add(0x20);
-                commonPacketFormat.Data.Add(AssemblyObjectClass);
-                commonPacketFormat.Data.Add(0x24);
-                commonPacketFormat.Data.Add(ConfigurationAssemblyInstanceID);
+                //Connection Path
+                connectionPath.AddRange(new byte[] { 0x20, AssemblyObjectClass, 0x24, ConfigurationAssemblyInstanceID });
                 if (O_T_ConnectionType != ConnectionType.Null)
                 {
-                    commonPacketFormat.Data.Add(0x2C);
-                    commonPacketFormat.Data.Add(O_T_InstanceID);
+                    connectionPath.AddRange(new byte[] { 0x2C, O_T_InstanceID });
                 }
                 if (T_O_ConnectionType != ConnectionType.Null)
                 {
-                    commonPacketFormat.Data.Add(0x2C);
-                    commonPacketFormat.Data.Add(T_O_InstanceID);
+                    connectionPath.AddRange(new byte[] { 0x2C, T_O_InstanceID });
                 }
+                commonPacketFormat.Data.Add((byte) (connectionPath.Count / 2)); //Connection Path size
+                commonPacketFormat.Data.AddRange(connectionPath.ToArray()); //Connection Path
+                this.ConnectionPath = connectionPath;
 
                 //AddSocket Addrress Item O->T
                 commonPacketFormat.SocketaddrInfo_O_T = new Encapsulation.SocketAddress();
@@ -431,8 +424,8 @@ namespace Sres.Net.EEIP
             }
             else //Transport Class 2 or 3 pointing to a PLC
             {
-                commonPacketFormat.Data.Add(0x03); //connection path size is 3 words (16-bit)
-                commonPacketFormat.Data.AddRange(new byte[6] { 0x01, (byte) this.ProcessorSlot, 0x20, 0x02, 0x24, 0x01 });
+                commonPacketFormat.Data.Add((byte)(this.ConnectionPath.Count / 2)); //Connection Path size
+                commonPacketFormat.Data.AddRange(this.ConnectionPath.ToArray()); //Connection Path
             }
                 
             var encapsulation = BuildUCMMHeader(Encapsulation.CommandsEnum.SendRRData, commonPacketFormat);
@@ -502,7 +495,7 @@ namespace Sres.Net.EEIP
             }
         }
 
-        public void ForwardClose()
+        public virtual void ForwardClose()
         {
             stopUDP = true; //First stop the Thread which send data
 
@@ -530,32 +523,30 @@ namespace Sres.Net.EEIP
             commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt16)this.VendorID)); //Originator Vendor ID
             commonPacketFormat.Data.AddRange(BitConverter.GetBytes((UInt32)this.SerialNumber)); //Originator Serial Number
 
+            var connectionPath = new List<byte>();
             //Connection Path: Route to the target device
             if (this.TransportClass == 0 || this.TransportClass == 1) //Transport Class 0 or 1 uses UDP
             {
-                commonPacketFormat.Data.Add((byte)((0x2) + (O_T_ConnectionType == ConnectionType.Null ? 0 : 1) + (T_O_ConnectionType == ConnectionType.Null ? 0 : 1))); //Connection Path size 
-                commonPacketFormat.Data.Add(0); //Reserved
-
-                commonPacketFormat.Data.Add(0x20);
-                commonPacketFormat.Data.Add(AssemblyObjectClass);
-                commonPacketFormat.Data.Add(0x24);
-                commonPacketFormat.Data.Add(ConfigurationAssemblyInstanceID);
+                //Connection Path
+                connectionPath.AddRange(new byte[] { 0x20, AssemblyObjectClass, 0x24, ConfigurationAssemblyInstanceID });
                 if (O_T_ConnectionType != ConnectionType.Null)
                 {
-                    commonPacketFormat.Data.Add(0x2C);
-                    commonPacketFormat.Data.Add(O_T_InstanceID);
+                    connectionPath.AddRange(new byte[] { 0x2C, O_T_InstanceID });
                 }
                 if (T_O_ConnectionType != ConnectionType.Null)
                 {
-                    commonPacketFormat.Data.Add(0x2C);
-                    commonPacketFormat.Data.Add(T_O_InstanceID);
+                    connectionPath.AddRange(new byte[] { 0x2C, T_O_InstanceID });
                 }
+                commonPacketFormat.Data.Add((byte)(connectionPath.Count / 2)); //Connection Path size
+                commonPacketFormat.Data.Add(0); //Reserved
+                commonPacketFormat.Data.AddRange(connectionPath.ToArray()); //Connection Path
+                this.ConnectionPath = connectionPath;
             }
             else //Transport Class 2 or 3 uses just TCP
             {
-                commonPacketFormat.Data.Add(0x03); //connection path size is 3 words (16-bit)
+                commonPacketFormat.Data.Add((byte)(this.ConnectionPath.Count / 2)); //Connection Path size
                 commonPacketFormat.Data.Add(0); //Reserved
-                commonPacketFormat.Data.AddRange(new byte[6] { 0x01, (byte)this.ProcessorSlot, 0x20, 0x02, 0x24, 0x01 });
+                commonPacketFormat.Data.AddRange(this.ConnectionPath.ToArray()); //Connection Path
             }
 
             var encapsulation = BuildUCMMHeader(Encapsulation.CommandsEnum.SendRRData, commonPacketFormat);

@@ -9,7 +9,6 @@ namespace CM
 {
     public class ConnectionManager
     {
-        public Logix plc = new Logix();
         public Int32 Heartbeat;
         public List<CameraResponse> cameraData = new List<CameraResponse>();
         public enum CameraCommands : Int32
