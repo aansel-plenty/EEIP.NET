@@ -72,9 +72,9 @@ namespace Sres.Net.EEIP
     /// <summary>
     /// Table B-1.1 CIP General Status Codes
     /// </summary>
-    internal static class CIPGeneralStatusCodes
+    public static class CIPGeneralStatusCodes
     {
-        internal static Dictionary<byte, string> GetStatus(byte code)
+        public static Dictionary<byte, string> GetStatus(byte code)
         {
             var statusName = GetStatusName(code);
             return new Dictionary<byte, string>
@@ -82,7 +82,7 @@ namespace Sres.Net.EEIP
                     {code,statusName}
                 };
         }
-        internal static string GetStatusName(byte code)
+        public static string GetStatusName(byte code)
         {
             if (!StatusCodes.TryGetValue(code, out string statusName))
             {

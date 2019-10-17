@@ -18,6 +18,7 @@ namespace Sres.Net.EEIP
         private UInt32 connectionID_T_O;
         private UInt32 multicastAddress;
         protected UInt16 ConnectionSerialNumber;
+        public bool IsRegistered { get => this.sessionHandle != 0; }
         public bool IsConnected { get => this.ConnectionSerialNumber != 0; }
         private UInt16? ConnectionSequenceCounter = 0;
         private UInt64 context = 0x00000000;
@@ -29,7 +30,7 @@ namespace Sres.Net.EEIP
         /// TCP-Port of the Server - Standard is 0xAF12 44818
         /// </summary>
         public ushort TCPPort { get; set; } = 0xAF12;
-        public int TCPClientTimeout { get; set; } = 5000;
+        public int TCPClientTimeout { get; set; } = 0;
         /// <summary>
         /// UDP-Port of the IO-Adapter - Standard is 0x08AE 2222
         /// </summary>
@@ -238,17 +239,18 @@ namespace Sres.Net.EEIP
             encapsulation.CommandSpecificData.AddRange(BitConverter.GetBytes((UInt16) 0x0001)); //Requested protocol version shall be set to 1.
             encapsulation.CommandSpecificData.AddRange(BitConverter.GetBytes((UInt16) 0x0000)); //Session options shall be set to "0"
 
-            client = new TcpClient(this.IPAddress, this.TCPPort);
-            //client.ReceiveTimeout = this.TCPClientTimeout;
-            //client.SendTimeout = this.TCPClientTimeout;
+            client = new TcpClient(this.IPAddress, this.TCPPort)
+            {
+                ReceiveTimeout = this.TCPClientTimeout,
+                SendTimeout = this.TCPClientTimeout
+            };
             stream = client.GetStream();
 
+            byte[] recvData = new Byte[256];
             stream.Write(encapsulation.ToBytes(), 0, encapsulation.ToBytes().Length);
-            byte[] data = new Byte[256];
+            stream.Read(recvData, 0, recvData.Length);
 
-            Int32 bytes = stream.Read(data, 0, data.Length);
-
-            this.sessionHandle = BitConverter.ToUInt32(data.Skip(4).Take(4).ToArray(),0); //get session handle. bytes 4,5,6,7
+            this.sessionHandle = BitConverter.ToUInt32(recvData.ToArray(),4); //get session handle. bytes 4,5,6,7
             return this.sessionHandle;
         }
 
@@ -269,7 +271,7 @@ namespace Sres.Net.EEIP
             encapsulation.SessionHandle = this.sessionHandle;
  
             stream.Write(encapsulation.ToBytes(), 0, encapsulation.ToBytes().Length);
-            byte[] data = new Byte[256];
+
             client.Close();
             stream.Close();
             sessionHandle = 0;
@@ -635,9 +637,11 @@ namespace Sres.Net.EEIP
             if (this.sessionHandle == 0) //If a Session is not registered, Try to Register a Session with the predefined IP-Address and Port
                 this.RegisterSession();
 
-            byte[] dataToWrite = new byte[encapsulation.ToBytes().Length + commonPacketFormat.ToBytes().Length];
-            System.Buffer.BlockCopy(encapsulation.ToBytes(), 0, dataToWrite, 0, encapsulation.ToBytes().Length);
-            System.Buffer.BlockCopy(commonPacketFormat.ToBytes(), 0, dataToWrite, encapsulation.ToBytes().Length, commonPacketFormat.ToBytes().Length);
+            var encapsulationData = encapsulation.ToBytes();
+            var commonPacketFormatData = commonPacketFormat.ToBytes();
+            byte[] dataToWrite = new byte[encapsulationData.Length + commonPacketFormatData.Length];
+            System.Buffer.BlockCopy(encapsulationData, 0, dataToWrite, 0, encapsulationData.Length);
+            System.Buffer.BlockCopy(commonPacketFormatData, 0, dataToWrite, encapsulationData.Length, commonPacketFormatData.Length);
 
             byte[] recvBuffer = new byte[1024];
             stream.Write(dataToWrite, 0, dataToWrite.Length);
@@ -676,9 +680,11 @@ namespace Sres.Net.EEIP
             if (this.sessionHandle == 0) //If a Session is not registered, Try to Register a Session with the predefined IP-Address and Port
                 this.RegisterSession();
 
-            byte[] dataToWrite = new byte[encapsulation.ToBytes().Length + commonPacketFormat.ToBytes().Length];
-            System.Buffer.BlockCopy(encapsulation.ToBytes(), 0, dataToWrite, 0, encapsulation.ToBytes().Length);
-            System.Buffer.BlockCopy(commonPacketFormat.ToBytes(), 0, dataToWrite, encapsulation.ToBytes().Length, commonPacketFormat.ToBytes().Length);
+            var encapsulationData = encapsulation.ToBytes();
+            var commonPacketFormatData = commonPacketFormat.ToBytes();
+            byte[] dataToWrite = new byte[encapsulationData.Length + commonPacketFormatData.Length];
+            System.Buffer.BlockCopy(encapsulationData, 0, dataToWrite, 0, encapsulationData.Length);
+            System.Buffer.BlockCopy(commonPacketFormatData, 0, dataToWrite, encapsulationData.Length, commonPacketFormatData.Length);
 
             byte[] recvBuffer = new byte[1024];
             stream.Write(dataToWrite, 0, dataToWrite.Length);

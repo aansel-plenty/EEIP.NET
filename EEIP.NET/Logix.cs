@@ -378,7 +378,8 @@ namespace Sres.Net.EEIP
         {
             if (!TagCache.TryGetValue(tagPath,out LogixTag tag))
             {
-                ReadTagSingle(tagPath);  
+                ReadTagSingle(tagPath);
+                tag = TagCache[tagPath];
             }
             return WriteTagSingle(tagPath, tag.SymbolType, tagData);
         }
@@ -404,7 +405,44 @@ namespace Sres.Net.EEIP
                 }
                 services.Add(BuildWriteTagData(tag.Item1, TagCache[tagPath].SymbolType, tagData).ToArray());
             }
-            return MultiServicePacket(services);
+            var reply = MultiServicePacket(services);
+
+            var numTags = reply[1] << 8 | reply[0];
+            for (int i = 0; i < numTags; i++)
+            {
+                var offset = 2 + 2 * i;
+                var offsetIndex = ((reply[offset + 1] << 8) | reply[offset]);
+                var replyService = reply[offsetIndex];
+                var statusCode = reply[offsetIndex + 2];
+                var status = CIPGeneralStatusCodes.GetStatus(statusCode);
+                if (status.ContainsKey(CIPGeneralStatusCodes.CIP_SERVICE_SUCCESS))
+                {
+                    switch (replyService)
+                    {
+                        case 0xCC: //read tag service reply
+                            var readTagPath = readTags[i];
+                            var tagType = reply[offsetIndex + 4];
+                            var structureHandle = BitConverter.ToUInt16(reply, offsetIndex + 6);
+                            if (!TagCache.ContainsKey(readTagPath)) //Add tag to registry
+                            {
+                                TagCache[readTagPath] = new LogixTag()
+                                {
+                                    TagName = readTagPath,
+                                    SymbolType = tagType,
+                                    StructureHandle = (UInt16)((tagType == 0xA0) ? structureHandle : 0x0000)
+                                };
+                            }
+                            break;
+                        case 0xCD:
+                            break;
+                        default:
+                            break;
+                    }
+                }
+
+            }
+
+            return reply;
         }
     }
 
