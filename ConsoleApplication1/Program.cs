@@ -1,9 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Threading;
 using System.Linq;
 using System.Text;
+using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using Sres.Net.EEIP;
 using static CM.ConnectionManager;
@@ -16,28 +17,28 @@ namespace ConsoleApplication1
         {
             //EIPTests();
 
-            Task.Run(ControlLoop);
+            Task t = Task.Run(ControlLoopAsync);
 
             while (true)
             {
-
+                Thread.Sleep(1000);
             }
 
-            //plc.UnRegisterSession();
             //Console.ReadKey();
         }
 
-        public static async Task ControlLoop ()
+        public static async Task ControlLoopAsync ()
         {
             var transplanter = new CM.ConnectionManager()
             {
                 readTagPath = "toVision",
-                writeTagPath = "fromVision"
+                writeTagPath = "fromVision",
+                RPI = 20
             };
             var plc = new Logix()
             {
                 IPAddress = "10.100.21.30", //Desk PLC
-                TCPClientTimeout = 1000, //1 second timeout for PLC communications
+                TCPClientTimeout = 3000, //timeout (ms) for PLC communications
                 TransportType = 0x83
             };
 
@@ -56,46 +57,65 @@ namespace ConsoleApplication1
                 switch (transplanter.PLCState)
                 {
                     case PLCStates.Timeout:
+                        Thread.Sleep(3000);
+                        transplanter.PLCState = PLCStates.Offline;
                         break;
                     case PLCStates.Offline:
-                        plc.RegisterSession();
-                        plc.ForwardOpen();
+                        Console.WriteLine("Trying to connect to PLC @:{0}", plc.IPAddress);
+                        try
+                        {
+                            plc.RegisterSession();
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine("Failed to register session with PLC @:{0}", plc.IPAddress);
+                            transplanter.PLCState = PLCStates.Timeout;
+                        }
+                        
+                        //plc.ForwardOpen();
                         transplanter.PLCState = PLCStates.Connecting;
                         break;
                     case PLCStates.Connecting:
                         if (plc.IsRegistered)
                         {
+                            Console.WriteLine("Connected to PLC @:{0}", plc.IPAddress);
                             transplanter.PLCState = PLCStates.Communicating;
+                        }
+                        else
+                        {
+                            transplanter.PLCState = PLCStates.Timeout;
                         }
                         break;
                     case PLCStates.Communicating:
                         var tasks = new List<Task>();
                         transplanter.Heartbeat++;
                         writeTags[0] = Tuple.Create(transplanter.writeTagPath, transplanter.GetBytesToWrite());
+                        var token = new CancellationToken();
+
                         try
                         {
-                            Task controlTask = GetReadCommandsAsync(plc, readTags, writeTags);
-                            Task timeout = Task.Delay(20);
+                            Task controlTask = GetReadCommandsAsync(token, plc, readTags, writeTags);
+                            Task timeout = Task.Delay(transplanter.RPI);
                             tasks.Add(controlTask);
                             tasks.Add(timeout);
                             Task finished = Task.WhenAll(tasks);
                             await finished;
-                            counter++;
-                            if (counter %50 == 0)
-                            {
-                                curtime = stopWatch.ElapsedMilliseconds;
-                                Console.WriteLine("Elapsed time {0} ms, per loop {1}", stopWatch.ElapsedMilliseconds, (curtime-lasttime)/50.0);
-                                lasttime = stopWatch.ElapsedMilliseconds;
-                            }
                         }
-                        catch (Exception ex)
+                        catch (Exception e)
                         {
-                            Console.WriteLine("Exception message: " + ex.Message);
-                            //throw;
+                            Console.WriteLine("Bye Lost connection to PLC @:{0}", plc.IPAddress);
+                            Console.WriteLine("An error ocurred while communicating with the PLC: {0}", e.Message);
+                            transplanter.PLCState = PLCStates.Offline;
                         }
-                        //Console.WriteLine("Elapsed time {0} ms", stopWatch.ElapsedMilliseconds);
-
-                        //Thread.Sleep(20);
+                        
+                        counter++;
+                        if (counter % (1000/ transplanter.RPI) == 0)
+                        {
+                            curtime = stopWatch.ElapsedMilliseconds;
+                            Console.WriteLine("Elapsed time {0} ms, per loop {1} ms", stopWatch.ElapsedMilliseconds, (curtime-lasttime)/ (1000.0 / transplanter.RPI));
+                            Console.WriteLine("Current heartbeat is {0}", transplanter.Heartbeat);
+                            lasttime = stopWatch.ElapsedMilliseconds;
+                        }
                         break;
                     default:
                         break;
@@ -104,10 +124,20 @@ namespace ConsoleApplication1
         }
 
 
-        public static async Task<List<CameraCommands>> GetReadCommandsAsync(Logix plc, List<string> readTags, List<Tuple<string, byte[]>> writeTags)
+        public static async Task<List<CameraCommands>> GetReadCommandsAsync(CancellationToken token, Logix plc, List<string> readTags, List<Tuple<string, byte[]>> writeTags)
         {
-            var reply = await Task.Run(() => plc.MultiReadWrite(readTags, writeTags));
-            return ReadCommands(plc, reply);
+            var reply = new byte[1];
+            var commands = new List<CameraCommands>();
+            try
+            {
+                reply = await Task.Run(() => plc.MultiReadWrite(readTags, writeTags));
+                commands = ReadCommands(plc, reply);
+            }
+            catch (Exception e)
+            {
+                throw new Exception(String.Format("An error ocurred while communicating with the PLC: {0}", e.Message),e);
+            }
+            return commands;
         }
         public static List<CameraCommands> ReadCommands(Logix plc, byte[] reply)
         {

@@ -9,6 +9,7 @@ namespace CM
 {
     public class ConnectionManager
     {
+        public int RPI = 20; //20 ms delay between tasks
         public Int32 Heartbeat;
         public PLCStates PLCState;
         public string readTagPath = "";

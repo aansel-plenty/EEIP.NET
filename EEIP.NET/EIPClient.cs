@@ -239,16 +239,29 @@ namespace Sres.Net.EEIP
             encapsulation.CommandSpecificData.AddRange(BitConverter.GetBytes((UInt16) 0x0001)); //Requested protocol version shall be set to 1.
             encapsulation.CommandSpecificData.AddRange(BitConverter.GetBytes((UInt16) 0x0000)); //Session options shall be set to "0"
 
-            client = new TcpClient(this.IPAddress, this.TCPPort)
-            {
-                ReceiveTimeout = this.TCPClientTimeout,
-                SendTimeout = this.TCPClientTimeout
-            };
-            stream = client.GetStream();
-
             byte[] recvData = new Byte[256];
-            stream.Write(encapsulation.ToBytes(), 0, encapsulation.ToBytes().Length);
-            stream.Read(recvData, 0, recvData.Length);
+            try
+            {
+                client = new TcpClient();
+                var tcpConnectResult = client.BeginConnect(this.IPAddress, this.TCPPort , null, null);
+                client.ReceiveTimeout = this.TCPClientTimeout;
+                client.SendTimeout = this.TCPClientTimeout;
+                tcpConnectResult.AsyncWaitHandle.WaitOne(1000);
+                if(!client.Connected)
+                {
+                    throw new Exception(String.Format("Failed to open TCP connection with {0}:{1}",this.IPAddress, this.TCPPort));
+                }
+                
+                stream = client.GetStream();
+                stream.Write(encapsulation.ToBytes(), 0, encapsulation.ToBytes().Length);
+                stream.Read(recvData, 0, recvData.Length);
+            }
+            catch (Exception e)
+            {
+                this.sessionHandle = 0; //communications were lost
+                //TODO: add connection lost method which resets some flags/properties
+                throw new Exception(String.Format("An error ocurred while communicating with the CIP device: {0}", e.Message), e);
+            }
 
             this.sessionHandle = BitConverter.ToUInt32(recvData.ToArray(),4); //get session handle. bytes 4,5,6,7
             return this.sessionHandle;
@@ -644,8 +657,20 @@ namespace Sres.Net.EEIP
             System.Buffer.BlockCopy(commonPacketFormatData, 0, dataToWrite, encapsulationData.Length, commonPacketFormatData.Length);
 
             byte[] recvBuffer = new byte[1024];
-            stream.Write(dataToWrite, 0, dataToWrite.Length);
-            var recvLength = stream.Read(recvBuffer, 0, recvBuffer.Length);
+            var recvLength = 0;
+            
+            try
+            {
+                stream.Write(dataToWrite, 0, dataToWrite.Length);
+                recvLength = stream.Read(recvBuffer, 0, recvBuffer.Length);
+            }
+            catch (Exception e)
+            {
+                this.sessionHandle = 0; //communications were lost
+                //TODO: add connection lost method which resets some flags/properties
+                throw new Exception(String.Format("An error ocurred while communicating with the CIP device: {0}", e.Message), e);
+            }
+            
             var replyOffset = 40;
             switch (encapsulation.Command)
             {
