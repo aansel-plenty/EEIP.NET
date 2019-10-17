@@ -27,13 +27,13 @@ namespace ConsoleApplication1
             //Console.ReadKey();
         }
 
-        public static async Task ControlLoopAsync ()
+        public static async Task ControlLoopAsync()
         {
             var transplanter = new CM.ConnectionManager()
             {
-                readTagPath = "toVision",
-                writeTagPath = "fromVision",
-                RPI = 20
+                ReadTagPath = "toVision",
+                WriteTagPath = "fromVision",
+                RPI = 10
             };
             var plc = new Logix()
             {
@@ -42,7 +42,7 @@ namespace ConsoleApplication1
                 TransportType = 0x83
             };
 
-            var readTags = new List<string> { transplanter.readTagPath };
+            var readTags = new List<string> { transplanter.ReadTagPath };
             var writeTags = new List<Tuple<string, byte[]>> { Tuple.Create("", new byte[1]) };
             var counter = 0;
             var stopWatch = new Stopwatch();
@@ -89,17 +89,19 @@ namespace ConsoleApplication1
                     case PLCStates.Communicating:
                         var tasks = new List<Task>();
                         transplanter.Heartbeat++;
-                        writeTags[0] = Tuple.Create(transplanter.writeTagPath, transplanter.GetBytesToWrite());
+                        writeTags[0] = Tuple.Create(transplanter.WriteTagPath, transplanter.GetBytesToWrite());
                         var token = new CancellationToken();
+                        var results = new List<CameraCommands>();
 
                         try
                         {
-                            Task controlTask = GetReadCommandsAsync(token, plc, readTags, writeTags);
-                            Task timeout = Task.Delay(transplanter.RPI);
+                            var controlTask = GetReadCommandsAsync(token, plc, readTags, writeTags);
+                            var timeout = Task.Delay(transplanter.RPI);
                             tasks.Add(controlTask);
                             tasks.Add(timeout);
                             Task finished = Task.WhenAll(tasks);
                             await finished;
+                            results = controlTask.Result;
                         }
                         catch (Exception e)
                         {
@@ -112,9 +114,20 @@ namespace ConsoleApplication1
                         if (counter % (1000/ transplanter.RPI) == 0)
                         {
                             curtime = stopWatch.ElapsedMilliseconds;
+                            Console.WriteLine();
                             Console.WriteLine("Elapsed time {0} ms, per loop {1} ms", stopWatch.ElapsedMilliseconds, (curtime-lasttime)/ (1000.0 / transplanter.RPI));
                             Console.WriteLine("Current heartbeat is {0}", transplanter.Heartbeat);
+                            
+                            for (int i = 0; i < results.Count; i++)
+                            {
+                                transplanter.UpdateCameraCommand(i + 1, results[i]);
+                            }
                             lasttime = stopWatch.ElapsedMilliseconds;
+                            
+                        }
+                        if (counter == 2500)
+                        {
+                            Console.Clear();
                         }
                         break;
                     default:
@@ -269,16 +282,14 @@ namespace ConsoleApplication1
 
             for (int i = 0; i < 8; i++)
             {
-                var c1 = new CameraResponse();
-                c1.status = (CameraStatus)BitConverter.ToInt32(response, 4 + 8 * i);
-                c1.offset = BitConverter.ToSingle(response, 8 + 8 * i);
-                transplanter.cameraData.Add(c1);
+                transplanter.cameras[i].status = (CameraStatus)BitConverter.ToInt32(response, 4 + 8 * i);
+                transplanter.cameras[i].offset = BitConverter.ToSingle(response, 8 + 8 * i);
             }
 
             //Just output for debug
             Console.WriteLine();
             Console.WriteLine("Heartbeat is {0}", transplanter.Heartbeat);
-            foreach (var item in transplanter.cameraData)
+            foreach (var item in transplanter.cameras)
             {
                 Console.WriteLine("Status is {0}, offset is {1}", item.status, item.offset);
             }
@@ -290,10 +301,10 @@ namespace ConsoleApplication1
             //update data
             var random = new Random();
             transplanter.Heartbeat++;
-            for (int i = 0; i < transplanter.cameraData.Count; i++)
+            for (int i = 0; i < transplanter.cameras.Count; i++)
             {
-                transplanter.cameraData[i].status++;
-                transplanter.cameraData[i].offset = (float)(1000.0 * random.NextDouble());
+                transplanter.cameras[i].status++;
+                transplanter.cameras[i].offset = (float)(1000.0 * random.NextDouble());
             }
             plc.WriteTagSingle("fromVision", transplanter.GetBytesToWrite());
 
