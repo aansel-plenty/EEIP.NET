@@ -70,7 +70,7 @@ namespace CM
             {
                 while (true)
                 {
-                    Thread.Sleep(250);
+                    Thread.Sleep(50);
                     //Console.WriteLine("Camera {0} woke up!", this.id);
                     switch (status)
                     {

@@ -102,6 +102,11 @@ namespace ConsoleApplication1
                             Task finished = Task.WhenAll(tasks);
                             await finished;
                             results = controlTask.Result;
+
+                            for (int i = 0; i < results.Count; i++)
+                            {
+                                transplanter.UpdateCameraCommand(i + 1, results[i]);
+                            }
                         }
                         catch (Exception e)
                         {
@@ -118,12 +123,7 @@ namespace ConsoleApplication1
                             Console.WriteLine("Elapsed time {0} ms, per loop {1} ms", stopWatch.ElapsedMilliseconds, (curtime-lasttime)/ (1000.0 / transplanter.RPI));
                             Console.WriteLine("Current heartbeat is {0}", transplanter.Heartbeat);
                             
-                            for (int i = 0; i < results.Count; i++)
-                            {
-                                transplanter.UpdateCameraCommand(i + 1, results[i]);
-                            }
                             lasttime = stopWatch.ElapsedMilliseconds;
-                            
                         }
                         if (counter == 2500)
                         {
